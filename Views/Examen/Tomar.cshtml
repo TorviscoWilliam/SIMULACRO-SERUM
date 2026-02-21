@@ -1,0 +1,166 @@
+@model ExamenViewModel
+@{
+    ViewData["Title"] = "Examen en Curso";
+    Layout = "_Layout";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+
+        <!-- Encabezado del examen -->
+        <div class="card border-0 shadow-sm mb-4 border-start border-primary border-4">
+            <div class="card-body py-3 d-flex align-items-center justify-content-between">
+                <div>
+                    <h4 class="fw-bold mb-0">
+                        <i class="bi bi-journal-text me-2 text-primary"></i>Simulacro de Examen
+                    </h4>
+                    <p class="text-muted small mb-0">
+                        @Model.Preguntas.Count pregunta(s) • Responde todas antes de enviar
+                    </p>
+                </div>
+                <div class="text-end">
+                    <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+                        <i class="bi bi-stopwatch me-1"></i>
+                        <span id="cronometro">00:00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progreso -->
+        <div class="mb-3">
+            <div class="d-flex justify-content-between small text-muted mb-1">
+                <span>Progreso</span>
+                <span id="progTexto">0 / @Model.Preguntas.Count respondidas</span>
+            </div>
+            <div class="progress" style="height:8px">
+                <div class="progress-bar bg-primary" id="barraProgreso"
+                     style="width:0%" role="progressbar"></div>
+            </div>
+        </div>
+
+        <!-- Formulario del examen -->
+        <form id="formExamen" asp-controller="Examen" asp-action="Enviar"
+              method="post" onsubmit="return validarExamen()">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="ExamenId" value="@Model.ExamenId"/>
+
+            @for (int i = 0; i < Model.Preguntas.Count; i++)
+            {
+                var pvm = Model.Preguntas[i];
+                <div class="card border-0 shadow-sm mb-3 pregunta-card" id="tarjeta_@pvm.PreguntaExamenId">
+                    <div class="card-body p-4">
+                        <!-- Número y pregunta -->
+                        <div class="d-flex gap-3 mb-3">
+                            <span class="badge bg-primary rounded-circle d-flex align-items-center justify-content-center"
+                                  style="width:2rem;height:2rem;min-width:2rem;font-size:.85rem">
+                                @(i + 1)
+                            </span>
+                            <p class="fw-semibold mb-0 fs-6">@pvm.TextoPregunta</p>
+                        </div>
+
+                        <!-- Alternativas -->
+                        <div class="ps-5">
+                            @foreach (var alt in pvm.Alternativas)
+                            {
+                                <div class="form-check alternativa-item mb-2">
+                                    <input class="form-check-input respuesta-radio"
+                                           type="radio"
+                                           name="respuesta_@pvm.PreguntaExamenId"
+                                           id="alt_@alt.Id"
+                                           value="@alt.Id"
+                                           data-card="tarjeta_@pvm.PreguntaExamenId"
+                                           onchange="marcarRespondida(this)"/>
+                                    <label class="form-check-label alternativa-label w-100 p-2 rounded"
+                                           for="alt_@alt.Id">
+                                        @alt.TextoAlternativa
+                                    </label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Botón enviar -->
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body p-4 d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="fw-semibold">¿Listo para enviar?</span>
+                        <div class="text-muted small" id="aviso">
+                            Responde todas las preguntas antes de enviar.
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-lg px-5">
+                        <i class="bi bi-send me-2"></i>Enviar Examen
+                    </button>
+                </div>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const totalPreguntas = @Model.Preguntas.Count;
+    let respondidas = 0;
+
+    // Cronómetro
+    let segundos = 0;
+    const crono = setInterval(() => {
+        segundos++;
+        const m = String(Math.floor(segundos / 60)).padStart(2, '0');
+        const s = String(segundos % 60).padStart(2, '0');
+        document.getElementById('cronometro').textContent = m + ':' + s;
+    }, 1000);
+
+    function marcarRespondida(radio) {
+        const cardId = radio.dataset.card;
+        const card   = document.getElementById(cardId);
+
+        if (!card.classList.contains('respondida')) {
+            card.classList.add('respondida');
+            respondidas++;
+            actualizarProgreso();
+        }
+
+        // Resaltar alternativa seleccionada
+        card.querySelectorAll('.alternativa-label').forEach(l => l.classList.remove('seleccionada'));
+        radio.nextElementSibling.classList.add('seleccionada');
+    }
+
+    function actualizarProgreso() {
+        const pct = (respondidas / totalPreguntas) * 100;
+        document.getElementById('barraProgreso').style.width = pct + '%';
+        document.getElementById('progTexto').textContent =
+            respondidas + ' / ' + totalPreguntas + ' respondidas';
+
+        if (respondidas === totalPreguntas) {
+            document.getElementById('aviso').textContent = '✓ Todas respondidas. Puedes enviar.';
+            document.getElementById('aviso').className = 'text-success small fw-semibold';
+        }
+    }
+
+    function validarExamen() {
+        if (respondidas < totalPreguntas) {
+            const falta = totalPreguntas - respondidas;
+            return confirm(
+                `Faltan ${falta} pregunta(s) sin responder. ` +
+                `Las preguntas sin respuesta se contarán como incorrectas.\n¿Deseas enviar de todos modos?`
+            );
+        }
+        clearInterval(crono);
+        return true;
+    }
+
+    // Advertencia al salir
+    window.addEventListener('beforeunload', function (e) {
+        e.preventDefault();
+        e.returnValue = '';
+    });
+    document.getElementById('formExamen').addEventListener('submit', function () {
+        window.removeEventListener('beforeunload', () => {});
+    });
+</script>
+}

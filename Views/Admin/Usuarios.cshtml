@@ -1,0 +1,128 @@
+@model List<UsuarioListaViewModel>
+@{
+    ViewData["Title"] = "Usuarios";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0"><i class="bi bi-people me-2 text-primary"></i>Usuarios</h2>
+        <p class="text-muted mb-0">@Model.Count usuario(s) registrado(s)</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="ExportarUsuarios" class="btn btn-success">
+            <i class="bi bi-file-earmark-excel me-2"></i>Exportar Excel
+        </a>
+        <a asp-action="CrearUsuario" class="btn btn-primary">
+            <i class="bi bi-person-plus me-2"></i>Nuevo Usuario
+        </a>
+    </div>
+</div>
+
+<!-- Búsqueda -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+        <input type="text" id="busqueda" class="form-control"
+               placeholder="Buscar por usuario o correo...">
+    </div>
+</div>
+
+<!-- Tabla -->
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" id="tablaUsuarios">
+            <thead class="table-dark">
+                <tr>
+                    <th>#</th>
+                    <th>Usuario</th>
+                    <th>Correo</th>
+                    <th>Fecha Creación</th>
+                    <th>Tiempo Registrado</th>
+                    <th class="text-center">Exámenes</th>
+                    <th class="text-center">Mejor Puntaje</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-center">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in Model)
+                {
+                    <tr class="@(u.Activo ? "" : "table-secondary opacity-75")">
+                        <td class="text-muted small">@u.Id</td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="avatar-circle bg-primary text-white">
+                                    @u.NombreUsuario[0].ToString().ToUpper()
+                                </div>
+                                <span class="fw-semibold">@u.NombreUsuario</span>
+                            </div>
+                        </td>
+                        <td class="text-muted small">@u.Correo</td>
+                        <td class="small">@u.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>
+                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
+                                <i class="bi bi-clock me-1"></i>@u.TiempoFormateado
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary-subtle text-primary rounded-pill px-3">
+                                @u.TotalExamenes
+                            </span>
+                        </td>
+                        <td class="text-center fw-bold">
+                            @u.MejorPuntaje
+                        </td>
+                        <td class="text-center">
+                            @if (u.Activo)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check2 me-1"></i>Activo</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Inactivo</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <form asp-action="ToggleUsuario" method="post"
+                                  onsubmit="return confirm('@(u.Activo ? "¿Desactivar" : "¿Activar") al usuario @u.NombreUsuario?')">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@u.Id"/>
+                                <button type="submit"
+                                        class="btn btn-sm @(u.Activo ? "btn-outline-danger" : "btn-outline-success")">
+                                    @if (u.Activo)
+                                    {
+                                        <i class="bi bi-person-x me-1"></i><text>Desactivar</text>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-person-check me-1"></i><text>Activar</text>
+                                    }
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="9" class="text-center py-5 text-muted">
+                            <i class="bi bi-people fs-1 d-block mb-2"></i>
+                            No hay usuarios registrados. <a asp-action="CrearUsuario">Crear el primero</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('busqueda').addEventListener('input', function () {
+        const q = this.value.toLowerCase();
+        document.querySelectorAll('#tablaUsuarios tbody tr').forEach(function (row) {
+            row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
+</script>
+}
