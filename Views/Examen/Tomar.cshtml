@@ -115,6 +115,9 @@
         document.getElementById('cronometro').textContent = m + ':' + s;
     }, 1000);
 
+    // Bandera que se activa al enviar el formulario para suprimir la advertencia
+    let examEnviado = false;
+
     function marcarRespondida(radio) {
         const cardId = radio.dataset.card;
         const card   = document.getElementById(cardId);
@@ -145,22 +148,27 @@
     function validarExamen() {
         if (respondidas < totalPreguntas) {
             const falta = totalPreguntas - respondidas;
+            // Si el usuario cancela, no se establece examEnviado y beforeunload sigue activo
             return confirm(
                 `Faltan ${falta} pregunta(s) sin responder. ` +
                 `Las preguntas sin respuesta se contarán como incorrectas.\n¿Deseas enviar de todos modos?`
             );
         }
-        clearInterval(crono);
         return true;
     }
 
-    // Advertencia al salir
+    // Advertencia al salir: se muestra solo si el examen aún no fue enviado.
+    // Nota: removeEventListener con función anónima no funciona (referencia distinta),
+    // por eso se usa la bandera 'examEnviado' para suprimir el diálogo tras el submit.
     window.addEventListener('beforeunload', function (e) {
-        e.preventDefault();
-        e.returnValue = '';
+        if (!examEnviado) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
     });
     document.getElementById('formExamen').addEventListener('submit', function () {
-        window.removeEventListener('beforeunload', () => {});
+        examEnviado = true;   // Suprimir beforeunload al confirmar envío
+        clearInterval(crono); // Detener cronómetro
     });
 </script>
 }

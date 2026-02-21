@@ -28,9 +28,20 @@
     {
         <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
             <div class="container-fluid px-4">
-                <a class="navbar-brand fw-bold" href="@(isAdmin ? Url.Action("Index","Admin") : Url.Action("Index","Examen"))">
-                    <i class="bi bi-journal-check me-2"></i>Simulacro SERUM
-                </a>
+                @if (isAdmin)
+                {
+                    <a class="navbar-brand fw-bold"
+                       asp-controller="Admin" asp-action="Index">
+                        <i class="bi bi-journal-check me-2"></i>Simulacro SERUM
+                    </a>
+                }
+                else
+                {
+                    <a class="navbar-brand fw-bold"
+                       asp-controller="Examen" asp-action="Index">
+                        <i class="bi bi-journal-check me-2"></i>Simulacro SERUM
+                    </a>
+                }
 
                 <button class="navbar-toggler" type="button"
                         data-bs-toggle="collapse" data-bs-target="#navMain">

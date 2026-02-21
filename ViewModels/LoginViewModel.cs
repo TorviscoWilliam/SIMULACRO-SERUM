@@ -2,17 +2,33 @@ using System.ComponentModel.DataAnnotations;
 
 namespace SimulacroExamen.ViewModels
 {
+    /// <summary>
+    /// ViewModel del formulario de inicio de sesión (GET/POST Account/Login).
+    /// Contiene solo los datos que el usuario ingresa en el formulario;
+    /// la autenticación real ocurre en AccountController.Login().
+    /// </summary>
     public class LoginViewModel
     {
+        /// <summary>Nombre de usuario ingresado. Se busca en la tabla Usuarios con Activo=true.</summary>
         [Required(ErrorMessage = "El usuario es obligatorio")]
         [Display(Name = "Usuario")]
         public string NombreUsuario { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Contraseña en texto plano. Se compara contra el hash BCrypt almacenado en la BD.
+        /// DataType.Password evita que el navegador la cachee y la oculta en el HTML.
+        /// </summary>
         [Required(ErrorMessage = "La contraseña es obligatoria")]
         [DataType(DataType.Password)]
         [Display(Name = "Contraseña")]
         public string Contrasena { get; set; } = string.Empty;
 
+        /// <summary>
+        /// URL a la que redirigir tras el login exitoso.
+        /// Viene del middleware de autorización cuando el usuario accede directamente
+        /// a una ruta protegida sin estar autenticado. Validado con Url.IsLocalUrl()
+        /// para prevenir ataques de open redirect.
+        /// </summary>
         public string? ReturnUrl { get; set; }
     }
 }
