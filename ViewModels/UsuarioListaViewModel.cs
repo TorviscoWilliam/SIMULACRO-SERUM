@@ -41,6 +41,9 @@ namespace SimulacroExamen.ViewModels
         /// </summary>
         public int      MejorPuntaje        { get; set; }
 
+        /// <summary>Nombres de los tipos de examen asignados a este usuario.</summary>
+        public List<string> TiposAsignados  { get; set; } = new();
+
         // ── Propiedades calculadas (no persistidas en BD) ──────────────
 
         /// <summary>

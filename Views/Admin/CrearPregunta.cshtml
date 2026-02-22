@@ -1,6 +1,7 @@
 @model PreguntaFormViewModel
 @{
     ViewData["Title"] = "Nueva Pregunta";
+    var tipos = (List<SimulacroExamen.Models.TipoExamen>)ViewBag.Tipos;
 }
 
 <div class="row justify-content-center">
@@ -12,7 +13,7 @@
                     <i class="bi bi-plus-circle me-2 text-success"></i>Nueva Pregunta
                 </h4>
                 <p class="text-muted small mb-0 mt-1">
-                    Ingrese la pregunta y sus alternativas. Marque cuál es la correcta.
+                    Seleccione el tipo de examen e ingrese la pregunta con sus alternativas.
                 </p>
             </div>
 
@@ -20,6 +21,19 @@
                 <form asp-action="CrearPregunta" method="post">
                     <div asp-validation-summary="ModelOnly"
                          class="alert alert-danger py-2 small"></div>
+
+                    <!-- Tipo de Examen -->
+                    <div class="mb-4">
+                        <label asp-for="TipoExamenId" class="form-label fw-semibold fs-6"></label>
+                        <select asp-for="TipoExamenId" class="form-select">
+                            <option value="">— Seleccione el tipo de examen —</option>
+                            @foreach (var t in tipos)
+                            {
+                                <option value="@t.Id">@t.Nombre</option>
+                            }
+                        </select>
+                        <span asp-validation-for="TipoExamenId" class="text-danger small"></span>
+                    </div>
 
                     <!-- Pregunta -->
                     <div class="mb-4">

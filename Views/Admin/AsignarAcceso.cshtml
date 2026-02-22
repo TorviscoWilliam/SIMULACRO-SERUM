@@ -1,0 +1,82 @@
+@model SimulacroExamen.ViewModels.AsignarAccesoViewModel
+@{
+    ViewData["Title"] = $"Acceso — {Model.NombreUsuario}";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 py-4">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="avatar-circle bg-info text-white" style="width:48px;height:48px;font-size:1.4rem">
+                        @Model.NombreUsuario[0].ToString().ToUpper()
+                    </div>
+                    <div>
+                        <h4 class="fw-bold mb-0">
+                            <i class="bi bi-key me-2 text-info"></i>Acceso de @Model.NombreUsuario
+                        </h4>
+                        <p class="text-muted small mb-0">
+                            Seleccione los tipos de examen a los que este usuario tendrá acceso.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-body p-4">
+                <form asp-action="AsignarAcceso" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="usuarioId" value="@Model.UsuarioId"/>
+
+                    <div class="row g-3 mb-4">
+                        @foreach (var tipo in Model.Tipos)
+                        {
+                            <div class="col-md-6">
+                                <div class="form-check card border @(tipo.Asignado ? "border-info bg-info-subtle" : "border-light") p-3 h-100">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           name="tiposSeleccionados"
+                                           value="@tipo.TipoExamenId"
+                                           id="tipo_@tipo.TipoExamenId"
+                                           @(tipo.Asignado ? "checked" : "")/>
+                                    <label class="form-check-label fw-semibold ms-2" for="tipo_@tipo.TipoExamenId">
+                                        <i class="bi bi-mortarboard me-1 @(tipo.Asignado ? "text-info" : "text-muted")"></i>
+                                        @tipo.Nombre
+                                    </label>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-info text-white flex-fill">
+                            <i class="bi bi-save me-2"></i>Guardar Accesos
+                        </button>
+                        <a asp-action="Usuarios" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // Resaltar dinámicamente al marcar/desmarcar
+    document.querySelectorAll('.form-check-input').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            const card = this.closest('.card');
+            if (this.checked) {
+                card.classList.add('border-info', 'bg-info-subtle');
+                card.classList.remove('border-light');
+            } else {
+                card.classList.remove('border-info', 'bg-info-subtle');
+                card.classList.add('border-light');
+            }
+        });
+    });
+</script>
+}

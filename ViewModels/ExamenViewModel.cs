@@ -7,13 +7,8 @@ namespace SimulacroExamen.ViewModels
     /// </summary>
     public class ExamenViewModel
     {
-        /// <summary>ID del examen activo (Examen.Id). Se usa en el POST de Enviar().</summary>
-        public int ExamenId { get; set; }
-
-        /// <summary>
-        /// Lista de preguntas en el orden aleatorio persistido en la BD.
-        /// Cada elemento incluye sus alternativas ya reordenadas según OrdenAlternativas.
-        /// </summary>
+        public int    ExamenId         { get; set; }
+        public string TipoExamenNombre { get; set; } = string.Empty;
         public List<PreguntaExamenVM> Preguntas { get; set; } = new();
     }
 

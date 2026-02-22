@@ -4,6 +4,7 @@
     string badgeClass  = Model.Porcentaje >= 70 ? "bg-success" : Model.Porcentaje >= 50 ? "bg-warning" : "bg-danger";
     string iconClass   = Model.Porcentaje >= 70 ? "bi-trophy-fill text-warning" : Model.Porcentaje >= 50 ? "bi-emoji-neutral text-warning" : "bi-emoji-frown text-danger";
     string mensajeMain = Model.Porcentaje >= 70 ? "¡Excelente resultado!" : Model.Porcentaje >= 50 ? "Buen intento, sigue practicando" : "Sigue esforzándote";
+    string tituloExamen = !string.IsNullOrEmpty(Model.TipoExamenNombre) ? Model.TipoExamenNombre : "Examen";
 }
 
 <div class="row justify-content-center">
@@ -13,6 +14,9 @@
         <div class="card border-0 shadow mb-4">
             <div class="card-body p-4 text-center">
                 <i class="bi @iconClass mb-3 d-block" style="font-size:4rem"></i>
+                <span class="badge bg-info-subtle text-info border border-info-subtle mb-2">
+                    <i class="bi bi-mortarboard me-1"></i>@tituloExamen
+                </span>
                 <h2 class="fw-bold mb-1">@mensajeMain</h2>
 
                 <!-- Puntaje grande -->
@@ -53,12 +57,9 @@
 
         <!-- Acciones -->
         <div class="d-flex gap-3 mb-4">
-            <form asp-action="IniciarExamen" method="post" class="flex-fill">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-primary btn-lg w-100">
-                    <i class="bi bi-arrow-repeat me-2"></i>Nuevo Examen
-                </button>
-            </form>
+            <a asp-action="Index" class="btn btn-primary btn-lg flex-fill">
+                <i class="bi bi-arrow-repeat me-2"></i>Nuevo Examen
+            </a>
             <a asp-action="Historial" class="btn btn-outline-secondary btn-lg flex-fill">
                 <i class="bi bi-clock-history me-2"></i>Ver Historial
             </a>

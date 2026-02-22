@@ -7,8 +7,8 @@ namespace SimulacroExamen.ViewModels
     /// </summary>
     public class ResultadoExamenViewModel
     {
-        /// <summary>ID del examen completado. Se usa para el enlace "Ver resultado" del historial.</summary>
-        public int      ExamenId        { get; set; }
+        public int      ExamenId         { get; set; }
+        public string   TipoExamenNombre { get; set; } = string.Empty;
 
         /// <summary>Número de respuestas correctas (1 punto cada una).</summary>
         public int      Puntaje         { get; set; }

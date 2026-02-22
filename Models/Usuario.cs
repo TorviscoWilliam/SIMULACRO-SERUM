@@ -61,5 +61,8 @@ namespace SimulacroExamen.Models
         // ── Propiedades de navegación EF Core ───────────────────────
         /// <summary>Lista de todos los exámenes que ha realizado este usuario.</summary>
         public ICollection<Examen> Examenes { get; set; } = new List<Examen>();
+
+        /// <summary>Tipos de examen a los que el admin le ha dado acceso a este usuario.</summary>
+        public ICollection<UsuarioTipoExamen> UsuariosTipoExamen { get; set; } = new List<UsuarioTipoExamen>();
     }
 }

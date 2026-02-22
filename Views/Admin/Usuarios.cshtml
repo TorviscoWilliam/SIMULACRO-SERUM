@@ -35,12 +35,11 @@
                     <th>#</th>
                     <th>Usuario</th>
                     <th>Correo</th>
-                    <th>Fecha Creación</th>
-                    <th>Tiempo Registrado</th>
+                    <th>Tipos de Examen</th>
                     <th class="text-center">Exámenes</th>
                     <th class="text-center">Mejor Puntaje</th>
                     <th class="text-center">Estado</th>
-                    <th class="text-center">Acción</th>
+                    <th class="text-center">Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -53,24 +52,36 @@
                                 <div class="avatar-circle bg-primary text-white">
                                     @u.NombreUsuario[0].ToString().ToUpper()
                                 </div>
-                                <span class="fw-semibold">@u.NombreUsuario</span>
+                                <div>
+                                    <div class="fw-semibold">@u.NombreUsuario</div>
+                                    <div class="text-muted small">@u.FechaCreacion.ToString("dd/MM/yyyy")</div>
+                                </div>
                             </div>
                         </td>
                         <td class="text-muted small">@u.Correo</td>
-                        <td class="small">@u.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</td>
                         <td>
-                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
-                                <i class="bi bi-clock me-1"></i>@u.TiempoFormateado
-                            </span>
+                            @if (u.TiposAsignados.Any())
+                            {
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var tipo in u.TiposAsignados)
+                                    {
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle small">
+                                            @tipo
+                                        </span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Sin acceso</span>
+                            }
                         </td>
                         <td class="text-center">
                             <span class="badge bg-primary-subtle text-primary rounded-pill px-3">
                                 @u.TotalExamenes
                             </span>
                         </td>
-                        <td class="text-center fw-bold">
-                            @u.MejorPuntaje
-                        </td>
+                        <td class="text-center fw-bold">@u.MejorPuntaje</td>
                         <td class="text-center">
                             @if (u.Activo)
                             {
@@ -82,22 +93,28 @@
                             }
                         </td>
                         <td class="text-center">
-                            <form asp-action="ToggleUsuario" method="post"
-                                  onsubmit="return confirm('@(u.Activo ? "¿Desactivar" : "¿Activar") al usuario @u.NombreUsuario?')">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="id" value="@u.Id"/>
-                                <button type="submit"
-                                        class="btn btn-sm @(u.Activo ? "btn-outline-danger" : "btn-outline-success")">
-                                    @if (u.Activo)
-                                    {
-                                        <i class="bi bi-person-x me-1"></i><text>Desactivar</text>
-                                    }
-                                    else
-                                    {
-                                        <i class="bi bi-person-check me-1"></i><text>Activar</text>
-                                    }
-                                </button>
-                            </form>
+                            <div class="d-flex gap-1 justify-content-center">
+                                <a asp-action="AsignarAcceso" asp-route-id="@u.Id"
+                                   class="btn btn-sm btn-outline-info" title="Gestionar acceso">
+                                    <i class="bi bi-key me-1"></i>Acceso
+                                </a>
+                                <form asp-action="ToggleUsuario" method="post"
+                                      onsubmit="return confirm('@(u.Activo ? "¿Desactivar" : "¿Activar") al usuario @u.NombreUsuario?')">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@u.Id"/>
+                                    <button type="submit"
+                                            class="btn btn-sm @(u.Activo ? "btn-outline-danger" : "btn-outline-success")">
+                                        @if (u.Activo)
+                                        {
+                                            <i class="bi bi-person-x"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-person-check"></i>
+                                        }
+                                    </button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 }
@@ -105,7 +122,7 @@
                 @if (!Model.Any())
                 {
                     <tr>
-                        <td colspan="9" class="text-center py-5 text-muted">
+                        <td colspan="8" class="text-center py-5 text-muted">
                             <i class="bi bi-people fs-1 d-block mb-2"></i>
                             No hay usuarios registrados. <a asp-action="CrearUsuario">Crear el primero</a>
                         </td>

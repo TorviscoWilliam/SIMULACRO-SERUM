@@ -1,6 +1,8 @@
 @model List<Pregunta>
 @{
     ViewData["Title"] = "Preguntas";
+    var tipos  = (List<SimulacroExamen.Models.TipoExamen>)ViewBag.Tipos;
+    var tipoId = (int?)ViewBag.TipoId;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -21,11 +23,35 @@
     </div>
 </div>
 
-<!-- Búsqueda -->
+<!-- Filtro por tipo -->
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-2">
-        <input type="text" id="busqueda" class="form-control"
-               placeholder="Buscar pregunta...">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-5">
+                <form method="get" asp-action="Preguntas" class="d-flex gap-2">
+                    <select name="tipoId" class="form-select">
+                        <option value="">— Todos los tipos —</option>
+                        @foreach (var t in tipos)
+                        {
+                            <option value="@t.Id" @(tipoId == t.Id ? "selected" : "")>@t.Nombre</option>
+                        }
+                    </select>
+                    <button type="submit" class="btn btn-outline-primary text-nowrap">
+                        <i class="bi bi-funnel me-1"></i>Filtrar
+                    </button>
+                    @if (tipoId.HasValue)
+                    {
+                        <a asp-action="Preguntas" class="btn btn-outline-secondary text-nowrap">
+                            <i class="bi bi-x me-1"></i>Limpiar
+                        </a>
+                    }
+                </form>
+            </div>
+            <div class="col-md-7">
+                <input type="text" id="busqueda" class="form-control"
+                       placeholder="Buscar pregunta...">
+            </div>
+        </div>
     </div>
 </div>
 
@@ -34,7 +60,6 @@
     @for (int i = 0; i < Model.Count; i++)
     {
         var p = Model[i];
-        var correcta = p.Alternativas.FirstOrDefault(a => a.EsCorrecta);
         <div class="accordion-item border-0 shadow-sm mb-2 pregunta-item" data-texto="@p.TextoPregunta.ToLower()">
             <h2 class="accordion-header">
                 <button class="accordion-button collapsed rounded" type="button"
@@ -42,7 +67,17 @@
                         data-bs-target="#preg_@p.Id">
                     <div class="d-flex align-items-center gap-3 w-100">
                         <span class="badge bg-success rounded-pill px-3">@(i + 1)</span>
-                        <span class="flex-grow-1 text-truncate" style="max-width:70%">
+                        @if (p.TipoExamen != null)
+                        {
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle small text-nowrap">
+                                @p.TipoExamen.Nombre
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary-subtle text-secondary border small text-nowrap">Sin tipo</span>
+                        }
+                        <span class="flex-grow-1 text-truncate" style="max-width:55%">
                             @p.TextoPregunta
                         </span>
                         <span class="badge bg-light text-dark border ms-auto me-3 small">
@@ -119,10 +154,19 @@
             <form asp-action="CargarPreguntas" method="post" enctype="multipart/form-data">
                 @Html.AntiForgeryToken()
                 <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tipo de Examen <span class="text-danger">*</span></label>
+                        <select name="tipoExamenId" class="form-select" required>
+                            <option value="">— Seleccione el tipo —</option>
+                            @foreach (var t in tipos)
+                            {
+                                <option value="@t.Id">@t.Nombre</option>
+                            }
+                        </select>
+                    </div>
                     <div class="alert alert-info small">
                         <i class="bi bi-info-circle me-1"></i>
-                        Use el formato de la plantilla. Columnas:
-                        <strong>Pregunta | Resp. Correcta | Opción 2 | Opción 3 | Opción 4</strong>
+                        Columnas: <strong>Pregunta | Resp. Correcta | Opción 2 | Opción 3 | Opción 4</strong>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Archivo Excel (.xlsx)</label>
@@ -134,9 +178,7 @@
                     </a>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                        Cancelar
-                    </button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-success">
                         <i class="bi bi-upload me-2"></i>Importar
                     </button>
