@@ -84,7 +84,11 @@ namespace SimulacroExamen.Controllers
             if (!string.IsNullOrEmpty(vm.ReturnUrl) && Url.IsLocalUrl(vm.ReturnUrl))
                 return Redirect(vm.ReturnUrl);
 
-            return RedirectToRol();
+            // Usar usuario.Rol directamente: User.IsInRole() no refleja la cookie
+            // recién emitida en la misma request (el principal aún no está actualizado).
+            return usuario.Rol == "Admin"
+                ? RedirectToAction("Index", "Admin")
+                : RedirectToAction("Index", "Examen");
         }
 
         // ── GET /Account/Logout ──────────────────────────────────────
