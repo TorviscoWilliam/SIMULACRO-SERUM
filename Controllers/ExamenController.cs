@@ -57,7 +57,9 @@ namespace SimulacroExamen.Controllers
                 .Select(g => new { TipoId = g.Key, Cantidad = g.Count() })
                 .ToListAsync();
 
-            ViewBag.PreguntasPorTipo = preguntasPorTipo.ToDictionary(x => x.TipoId, x => x.Cantidad);
+            ViewBag.PreguntasPorTipo = preguntasPorTipo
+                .Where(x => x.TipoId.HasValue)
+                .ToDictionary(x => x.TipoId!.Value, x => x.Cantidad);
             ViewBag.TiposAcceso      = tiposAcceso;
 
             return View();

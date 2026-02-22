@@ -33,7 +33,14 @@
                         <option value="">— Todos los tipos —</option>
                         @foreach (var t in tipos)
                         {
-                            <option value="@t.Id" @(tipoId == t.Id ? "selected" : "")>@t.Nombre</option>
+                            @if (tipoId == t.Id)
+                            {
+                                <option value="@t.Id" selected="selected">@t.Nombre</option>
+                            }
+                            else
+                            {
+                                <option value="@t.Id">@t.Nombre</option>
+                            }
                         }
                     </select>
                     <button type="submit" class="btn btn-outline-primary text-nowrap">
