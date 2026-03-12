@@ -82,7 +82,9 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            int numPreguntas = _config.GetValue<int>("AppSettings:NumeroPreguntas", 4);
+            var tipoExamen = await _db.TiposExamen.FindAsync(tipoExamenId);
+            int numPreguntas = tipoExamen?.NumeroPreguntas
+                               ?? _config.GetValue<int>("AppSettings:NumeroPreguntas", 4);
 
             var preguntas = await _db.Preguntas
                 .Where(p => p.Activo && p.TipoExamenId == tipoExamenId)

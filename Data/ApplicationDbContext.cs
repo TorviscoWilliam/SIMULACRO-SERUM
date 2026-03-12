@@ -34,6 +34,7 @@ namespace SimulacroExamen.Data
             {
                 e.Property(t => t.Nombre).HasMaxLength(100);
                 e.HasIndex(t => t.Nombre).IsUnique();
+                e.Property(t => t.NumeroPreguntas).HasDefaultValue(4);
             });
 
             // ── UsuarioTiposExamen (tabla pivote Usuario <-> TipoExamen) ──

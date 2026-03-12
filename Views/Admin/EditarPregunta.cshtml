@@ -1,0 +1,128 @@
+@model SimulacroExamen.ViewModels.EditarPreguntaViewModel
+@{
+    ViewData["Title"] = "Editar Pregunta";
+    var tipos = (List<SimulacroExamen.Models.TipoExamen>)ViewBag.Tipos;
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 py-4">
+                <h4 class="fw-bold mb-0">
+                    <i class="bi bi-pencil-square me-2 text-warning"></i>Editar Pregunta
+                </h4>
+                <p class="text-muted small mb-0 mt-1">
+                    Modifique el texto y las alternativas de la pregunta.
+                </p>
+            </div>
+
+            <div class="card-body p-4">
+                <form asp-action="EditarPregunta" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="Id" />
+                    <div asp-validation-summary="ModelOnly"
+                         class="alert alert-danger py-2 small"></div>
+
+                    <!-- Tipo de Examen -->
+                    <div class="mb-4">
+                        <label asp-for="TipoExamenId" class="form-label fw-semibold fs-6"></label>
+                        <select asp-for="TipoExamenId" class="form-select">
+                            <option value="">— Seleccione el tipo de examen —</option>
+                            @foreach (var t in tipos)
+                            {
+                                @if (Model.TipoExamenId == t.Id)
+                                {
+                                    <option value="@t.Id" selected="selected">@t.Nombre</option>
+                                }
+                                else
+                                {
+                                    <option value="@t.Id">@t.Nombre</option>
+                                }
+                            }
+                        </select>
+                        <span asp-validation-for="TipoExamenId" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Pregunta -->
+                    <div class="mb-4">
+                        <label asp-for="TextoPregunta" class="form-label fw-semibold fs-6"></label>
+                        <textarea asp-for="TextoPregunta"
+                                  class="form-control"
+                                  rows="3"
+                                  placeholder="Escriba aquí la pregunta..."></textarea>
+                        <span asp-validation-for="TextoPregunta" class="text-danger small"></span>
+                    </div>
+
+                    <h6 class="fw-semibold text-muted mb-3 border-bottom pb-2">
+                        <i class="bi bi-list-check me-2"></i>Alternativas
+                    </h6>
+
+                    <!-- Respuesta Correcta -->
+                    <div class="mb-3">
+                        <label asp-for="RespuestaCorrecta" class="form-label fw-semibold"></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-success text-white">
+                                <i class="bi bi-check-circle-fill"></i>
+                            </span>
+                            <input asp-for="RespuestaCorrecta" class="form-control border-success"
+                                   placeholder="Texto de la respuesta correcta"/>
+                        </div>
+                        <span asp-validation-for="RespuestaCorrecta" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Opción 2 -->
+                    <div class="mb-3">
+                        <label asp-for="Opcion2" class="form-label fw-semibold"></label>
+                        <div class="input-group">
+                            <span class="input-group-text text-muted">
+                                <i class="bi bi-circle"></i>
+                            </span>
+                            <input asp-for="Opcion2" class="form-control"
+                                   placeholder="Opción incorrecta 2"/>
+                        </div>
+                        <span asp-validation-for="Opcion2" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Opción 3 -->
+                    <div class="mb-3">
+                        <label asp-for="Opcion3" class="form-label fw-semibold">
+                            Opción 3 <span class="text-muted fw-normal">(opcional)</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text text-muted">
+                                <i class="bi bi-circle"></i>
+                            </span>
+                            <input asp-for="Opcion3" class="form-control"
+                                   placeholder="Opción incorrecta 3 (opcional)"/>
+                        </div>
+                    </div>
+
+                    <!-- Opción 4 -->
+                    <div class="mb-4">
+                        <label asp-for="Opcion4" class="form-label fw-semibold">
+                            Opción 4 <span class="text-muted fw-normal">(opcional)</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text text-muted">
+                                <i class="bi bi-circle"></i>
+                            </span>
+                            <input asp-for="Opcion4" class="form-control"
+                                   placeholder="Opción incorrecta 4 (opcional)"/>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-warning flex-fill">
+                            <i class="bi bi-check-lg me-2"></i>Guardar Cambios
+                        </button>
+                        <a asp-action="Preguntas" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>

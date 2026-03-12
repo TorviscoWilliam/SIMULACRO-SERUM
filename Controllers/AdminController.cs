@@ -30,6 +30,33 @@ namespace SimulacroExamen.Controllers
                 .Where(e => e.Completado && e.TotalPreguntas > 0)
                 .AverageAsync(e => (double?)((double)e.Puntaje / e.TotalPreguntas * 100)) ?? 0;
 
+            // ── Datos para gráficos ──────────────────────────────────
+            var hoy   = DateTime.Today;
+            var hace7 = hoy.AddDays(-6);
+
+            var examenesPorDia = await _db.Examenes
+                .Where(e => e.Completado && e.FechaFin.HasValue && e.FechaFin.Value >= hace7)
+                .GroupBy(e => e.FechaFin!.Value.Date)
+                .Select(g => new { Fecha = g.Key, Cantidad = g.Count() })
+                .ToListAsync();
+
+            var dias = Enumerable.Range(0, 7).Select(i => hoy.AddDays(-6 + i)).ToList();
+            ViewBag.ChartLabels = dias.Select(d => d.ToString("dd/MM")).ToArray();
+            ViewBag.ChartData   = dias
+                .Select(d => examenesPorDia.FirstOrDefault(x => x.Fecha == d)?.Cantidad ?? 0)
+                .ToArray();
+
+            var pregsPorTipo = await _db.Preguntas
+                .Where(p => p.Activo && p.TipoExamenId != null)
+                .GroupBy(p => p.TipoExamen!.Nombre)
+                .Select(g => new { Tipo = g.Key, Cantidad = g.Count() })
+                .OrderByDescending(x => x.Cantidad)
+                .Take(10)
+                .ToListAsync();
+
+            ViewBag.TipoLabels = pregsPorTipo.Select(x => x.Tipo).ToArray();
+            ViewBag.TipoCounts = pregsPorTipo.Select(x => x.Cantidad).ToArray();
+
             return View();
         }
 
@@ -37,11 +64,17 @@ namespace SimulacroExamen.Controllers
         //  USUARIOS
         // ═══════════════════════════════════════════════════════════
 
-        public async Task<IActionResult> Usuarios()
+        public async Task<IActionResult> Usuarios(int page = 1)
         {
-            var usuarios = await _db.Usuarios
-                .Where(u => u.Rol == "Usuario")
+            const int pageSize = 15;
+
+            var query = _db.Usuarios.Where(u => u.Rol == "Usuario");
+            var total = await query.CountAsync();
+
+            var usuarios = await query
                 .OrderByDescending(u => u.FechaCreacion)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(u => new UsuarioListaViewModel
                 {
                     Id            = u.Id,
@@ -57,6 +90,11 @@ namespace SimulacroExamen.Controllers
                     TiposAsignados = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList()
                 })
                 .ToListAsync();
+
+            ViewBag.Page       = page;
+            ViewBag.PageSize   = pageSize;
+            ViewBag.TotalItems = total;
+            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
 
             return View(usuarios);
         }
@@ -207,12 +245,14 @@ namespace SimulacroExamen.Controllers
         //  PREGUNTAS
         // ═══════════════════════════════════════════════════════════
 
-        // GET /Admin/Preguntas?tipoId=
-        public async Task<IActionResult> Preguntas(int? tipoId)
+        // GET /Admin/Preguntas?tipoId=&page=
+        public async Task<IActionResult> Preguntas(int? tipoId, int page = 1)
         {
+            const int pageSize = 20;
+
             var tipos = await _db.TiposExamen.Where(t => t.Activo).OrderBy(t => t.Nombre).ToListAsync();
-            ViewBag.Tipos   = tipos;
-            ViewBag.TipoId  = tipoId;
+            ViewBag.Tipos  = tipos;
+            ViewBag.TipoId = tipoId;
 
             var query = _db.Preguntas
                 .Where(p => p.Activo)
@@ -223,7 +263,18 @@ namespace SimulacroExamen.Controllers
             if (tipoId.HasValue)
                 query = query.Where(p => p.TipoExamenId == tipoId.Value);
 
-            var preguntas = await query.OrderByDescending(p => p.FechaCreacion).ToListAsync();
+            var total     = await query.CountAsync();
+            var preguntas = await query
+                .OrderByDescending(p => p.FechaCreacion)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.Page      = page;
+            ViewBag.PageSize  = pageSize;
+            ViewBag.TotalItems = total;
+            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
+
             return View(preguntas);
         }
 
@@ -266,6 +317,71 @@ namespace SimulacroExamen.Controllers
             await _db.SaveChangesAsync();
 
             TempData["Exito"] = "Pregunta agregada correctamente.";
+            return RedirectToAction(nameof(Preguntas));
+        }
+
+        // GET /Admin/EditarPregunta/{id}
+        public async Task<IActionResult> EditarPregunta(int id)
+        {
+            var p = await _db.Preguntas
+                .Include(p => p.Alternativas)
+                .FirstOrDefaultAsync(p => p.Id == id && p.Activo);
+
+            if (p == null) return NotFound();
+
+            ViewBag.Tipos = await _db.TiposExamen.Where(t => t.Activo).OrderBy(t => t.Nombre).ToListAsync();
+
+            var correcta   = p.Alternativas.FirstOrDefault(a => a.EsCorrecta);
+            var incorrectas = p.Alternativas.Where(a => !a.EsCorrecta).ToList();
+
+            var vm = new EditarPreguntaViewModel
+            {
+                Id                = p.Id,
+                TextoPregunta     = p.TextoPregunta,
+                TipoExamenId      = p.TipoExamenId ?? 0,
+                RespuestaCorrecta = correcta?.TextoAlternativa ?? "",
+                Opcion2           = incorrectas.ElementAtOrDefault(0)?.TextoAlternativa ?? "",
+                Opcion3           = incorrectas.ElementAtOrDefault(1)?.TextoAlternativa,
+                Opcion4           = incorrectas.ElementAtOrDefault(2)?.TextoAlternativa
+            };
+
+            return View(vm);
+        }
+
+        // POST /Admin/EditarPregunta
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditarPregunta(EditarPreguntaViewModel vm)
+        {
+            if (!ModelState.IsValid)
+            {
+                ViewBag.Tipos = await _db.TiposExamen.Where(t => t.Activo).OrderBy(t => t.Nombre).ToListAsync();
+                return View(vm);
+            }
+
+            var p = await _db.Preguntas
+                .Include(p => p.Alternativas)
+                .FirstOrDefaultAsync(p => p.Id == vm.Id && p.Activo);
+
+            if (p == null) return NotFound();
+
+            p.TextoPregunta = vm.TextoPregunta;
+            p.TipoExamenId  = vm.TipoExamenId > 0 ? vm.TipoExamenId : null;
+
+            // Reemplazar alternativas
+            _db.Alternativas.RemoveRange(p.Alternativas);
+
+            p.Alternativas.Add(new Alternativa { TextoAlternativa = vm.RespuestaCorrecta, EsCorrecta = true });
+            p.Alternativas.Add(new Alternativa { TextoAlternativa = vm.Opcion2,           EsCorrecta = false });
+
+            if (!string.IsNullOrWhiteSpace(vm.Opcion3))
+                p.Alternativas.Add(new Alternativa { TextoAlternativa = vm.Opcion3, EsCorrecta = false });
+
+            if (!string.IsNullOrWhiteSpace(vm.Opcion4))
+                p.Alternativas.Add(new Alternativa { TextoAlternativa = vm.Opcion4, EsCorrecta = false });
+
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = "Pregunta actualizada correctamente.";
             return RedirectToAction(nameof(Preguntas));
         }
 
@@ -362,6 +478,85 @@ namespace SimulacroExamen.Controllers
             return File(bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "Plantilla_Preguntas.xlsx");
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  TIPOS DE EXAMEN
+        // ═══════════════════════════════════════════════════════════
+
+        public async Task<IActionResult> TiposExamen()
+        {
+            var tipos = await _db.TiposExamen.OrderBy(t => t.Nombre).ToListAsync();
+            return View(tipos);
+        }
+
+        public IActionResult CrearTipo() => View(new TipoExamen());
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CrearTipo(TipoExamen tipo)
+        {
+            if (!ModelState.IsValid) return View(tipo);
+
+            if (await _db.TiposExamen.AnyAsync(t => t.Nombre == tipo.Nombre))
+            {
+                ModelState.AddModelError(nameof(tipo.Nombre), "Ya existe un tipo con ese nombre.");
+                return View(tipo);
+            }
+
+            tipo.Activo = true;
+            _db.TiposExamen.Add(tipo);
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = $"Tipo '{tipo.Nombre}' creado correctamente.";
+            return RedirectToAction(nameof(TiposExamen));
+        }
+
+        public async Task<IActionResult> EditarTipo(int id)
+        {
+            var tipo = await _db.TiposExamen.FindAsync(id);
+            if (tipo == null) return NotFound();
+            return View(tipo);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditarTipo(TipoExamen tipo)
+        {
+            if (!ModelState.IsValid) return View(tipo);
+
+            if (await _db.TiposExamen.AnyAsync(t => t.Nombre == tipo.Nombre && t.Id != tipo.Id))
+            {
+                ModelState.AddModelError(nameof(tipo.Nombre), "Ya existe un tipo con ese nombre.");
+                return View(tipo);
+            }
+
+            var existing = await _db.TiposExamen.FindAsync(tipo.Id);
+            if (existing == null) return NotFound();
+
+            existing.Nombre          = tipo.Nombre;
+            existing.NumeroPreguntas = tipo.NumeroPreguntas;
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = $"Tipo '{existing.Nombre}' actualizado correctamente.";
+            return RedirectToAction(nameof(TiposExamen));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleTipo(int id)
+        {
+            var tipo = await _db.TiposExamen.FindAsync(id);
+            if (tipo == null) return NotFound();
+
+            tipo.Activo = !tipo.Activo;
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = tipo.Activo
+                ? $"Tipo '{tipo.Nombre}' activado."
+                : $"Tipo '{tipo.Nombre}' desactivado.";
+
+            return RedirectToAction(nameof(TiposExamen));
         }
     }
 }

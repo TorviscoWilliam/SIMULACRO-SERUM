@@ -1,0 +1,88 @@
+@model List<SimulacroExamen.Models.TipoExamen>
+@{
+    ViewData["Title"] = "Tipos de Examen";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0"><i class="bi bi-mortarboard me-2 text-purple" style="color:#6f42c1"></i>Tipos de Examen</h2>
+        <p class="text-muted mb-0">@Model.Count tipo(s) registrado(s)</p>
+    </div>
+    <a asp-action="CrearTipo" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Nuevo Tipo
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>#</th>
+                    <th>Nombre</th>
+                    <th class="text-center">Preguntas por Examen</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr class="@(t.Activo ? "" : "table-secondary opacity-75")">
+                        <td class="text-muted small">@t.Id</td>
+                        <td class="fw-semibold">@t.Nombre</td>
+                        <td class="text-center">
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3">
+                                @t.NumeroPreguntas
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            @if (t.Activo)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check2 me-1"></i>Activo</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Inactivo</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <a asp-action="EditarTipo" asp-route-id="@t.Id"
+                                   class="btn btn-sm btn-outline-warning" title="Editar">
+                                    <i class="bi bi-pencil me-1"></i>Editar
+                                </a>
+                                <form asp-action="ToggleTipo" method="post"
+                                      onsubmit="return confirm('@(t.Activo ? "¿Desactivar" : "¿Activar") el tipo @t.Nombre?')">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@t.Id"/>
+                                    <button type="submit"
+                                            class="btn btn-sm @(t.Activo ? "btn-outline-danger" : "btn-outline-success")">
+                                        @if (t.Activo)
+                                        {
+                                            <i class="bi bi-toggle-on"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-toggle-off"></i>
+                                        }
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center py-5 text-muted">
+                            <i class="bi bi-mortarboard fs-1 d-block mb-2"></i>
+                            No hay tipos de examen. <a asp-action="CrearTipo">Crear el primero</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
