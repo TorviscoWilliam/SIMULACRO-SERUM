@@ -3,10 +3,19 @@ using SimulacroExamen.Data;
 using SimulacroExamen.Models;
 using SimulacroExamen.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+
+// Necesario para que funcione correctamente detrás del proxy inverso de Azure
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -25,6 +34,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -46,9 +57,13 @@ app.MapControllerRoute(
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    context.Database.EnsureCreated();
 
-    // Sembrar administrador por defecto
+    // EnsureCreated crea la BD y todas las tablas si la BD no existe.
+    // Si la BD ya existe pero las tablas faltan (ej. BD creada manualmente o
+    // DROP ejecutado), verificamos la tabla Usuarios y recreamos si es necesario.
+    InicializarBD(context);
+
+    // Sembrar administrador por defecto (contraseña cifrada con BCrypt)
     if (!context.Usuarios.Any(u => u.Rol == "Admin"))
     {
         context.Usuarios.Add(new Usuario
@@ -89,14 +104,48 @@ using (var scope = app.Services.CreateScope())
     {
         if (!context.TiposExamen.Any(t => t.Nombre == nombre))
         {
-            context.TiposExamen.Add(new TipoExamen
-            {
-                Nombre = nombre,
-                Activo = true
-            });
+            context.TiposExamen.Add(new TipoExamen { Nombre = nombre, Activo = true });
         }
     }
     context.SaveChanges();
 }
 
 app.Run();
+
+// ── Helper: crear esquema desde cero si las tablas no existen ────
+static void InicializarBD(ApplicationDbContext context)
+{
+    // Paso 1: crear la BD si no existe (sin tocar las tablas si ya hay)
+    context.Database.EnsureCreated();
+
+    // Paso 2: verificar que la tabla Usuarios existe.
+    // EnsureCreated devuelve false cuando la BD ya existe, incluso si está vacía
+    // (comportamiento de SQL Server: si hay CUALQUIER tabla, no crea nada).
+    // Si Usuarios no existe, la BD está incompleta → eliminar y recrear.
+    try
+    {
+        var conn = context.Database.GetDbConnection();
+        conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES " +
+            "WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME = 'Usuarios'";
+
+        var existe = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        conn.Close();
+
+        if (!existe)
+        {
+            // BD existe pero sin las tablas esperadas → recrear desde cero
+            context.Database.EnsureDeleted();
+            context.Database.EnsureCreated();
+        }
+    }
+    catch
+    {
+        // No se pudo conectar o verificar → forzar recreación
+        context.Database.EnsureDeleted();
+        context.Database.EnsureCreated();
+    }
+}
