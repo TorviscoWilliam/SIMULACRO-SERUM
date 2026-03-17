@@ -11,49 +11,77 @@ namespace SimulacroExamen.Services
     {
         // ── Importar preguntas desde Excel ───────────────────────────
         /// <summary>
-        /// Lee un archivo Excel (.xlsx/.xls) y extrae preguntas del formato esperado:
-        ///   Columna A: Texto de la pregunta (obligatorio).
-        ///   Columna B: Respuesta correcta (obligatorio).
-        ///   Columna C: Opción incorrecta 2 (obligatorio).
-        ///   Columna D: Opción incorrecta 3 (opcional).
-        ///   Columna E: Opción incorrecta 4 (opcional).
-        /// La fila 1 se omite (es el encabezado). Las filas con pregunta o
-        /// respuesta correcta vacías son descartadas silenciosamente.
+        /// Lee un archivo Excel con el formato:
+        ///   Col A: Número (se ignora)
+        ///   Col B: La pregunta (obligatorio)
+        ///   Col C: Opción A (obligatorio)
+        ///   Col D: Opción B (obligatorio)
+        ///   Col E: Opción C (opcional)
+        ///   Col F: Opción D (opcional)
+        ///   Col G: Respuesta correcta — letra A, B, C o D (obligatorio)
+        /// La fila 1 se omite (encabezado).
         /// </summary>
-        /// <param name="stream">Stream del archivo Excel abierto por el controller.</param>
-        /// <returns>Lista de ViewModels listos para persistir en la BD.</returns>
         public List<PreguntaFormViewModel> ImportarPreguntas(Stream stream)
         {
             var lista = new List<PreguntaFormViewModel>();
 
             using var wb = new XLWorkbook(stream);
-            var ws = wb.Worksheet(1); // Siempre se lee la primera hoja
+            var ws = wb.Worksheet(1);
 
-            // La fila 1 es el encabezado; los datos empiezan en fila 2
             int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
 
             for (int row = 2; row <= lastRow; row++)
             {
-                var textoPregunta = ws.Cell(row, 1).GetString().Trim();
-                var respCorrecta  = ws.Cell(row, 2).GetString().Trim();
+                var textoPregunta = ws.Cell(row, 2).GetString().Trim(); // Col B
+                var opcionA       = ws.Cell(row, 3).GetString().Trim(); // Col C
+                var opcionB       = ws.Cell(row, 4).GetString().Trim(); // Col D
+                var opcionC       = ws.Cell(row, 5).GetString().Trim(); // Col E (opcional)
+                var opcionD       = ws.Cell(row, 6).GetString().Trim(); // Col F (opcional)
+                var letraCorrecta = ws.Cell(row, 7).GetString().Trim().ToUpperInvariant(); // Col G
 
-                // Descartar filas incompletas (mínimo obligatorio: pregunta y respuesta correcta)
-                if (string.IsNullOrEmpty(textoPregunta) || string.IsNullOrEmpty(respCorrecta))
+                // Campos mínimos obligatorios
+                if (string.IsNullOrEmpty(textoPregunta) ||
+                    string.IsNullOrEmpty(opcionA)       ||
+                    string.IsNullOrEmpty(opcionB)       ||
+                    string.IsNullOrEmpty(letraCorrecta))
                     continue;
 
-                var vm = new PreguntaFormViewModel
+                // Determinar cuál opción es la correcta según la letra
+                string? respCorrecta = letraCorrecta switch
+                {
+                    "A" => opcionA,
+                    "B" => opcionB,
+                    "C" => string.IsNullOrEmpty(opcionC) ? null : opcionC,
+                    "D" => string.IsNullOrEmpty(opcionD) ? null : opcionD,
+                    _   => null
+                };
+
+                if (respCorrecta == null) continue; // letra inválida o apunta a opción vacía
+
+                // Construir lista de incorrectas (todas las opciones excepto la correcta)
+                var opciones = new List<(string letra, string texto)>
+                {
+                    ("A", opcionA),
+                    ("B", opcionB),
+                };
+                if (!string.IsNullOrEmpty(opcionC)) opciones.Add(("C", opcionC));
+                if (!string.IsNullOrEmpty(opcionD)) opciones.Add(("D", opcionD));
+
+                var incorrectas = opciones
+                    .Where(o => o.letra != letraCorrecta)
+                    .Select(o => o.texto)
+                    .ToList();
+
+                if (incorrectas.Count == 0) continue;
+
+                lista.Add(new PreguntaFormViewModel
                 {
                     TextoPregunta     = textoPregunta,
                     RespuestaCorrecta = respCorrecta,
-                    Opcion2           = ws.Cell(row, 3).GetString().Trim(),
-                    Opcion3           = ws.Cell(row, 4).GetString().Trim().NullIfEmpty(), // null si vacío
-                    Opcion4           = ws.Cell(row, 5).GetString().Trim().NullIfEmpty(), // null si vacío
-                };
-
-                if (string.IsNullOrEmpty(vm.Opcion2))
-                    continue; // Necesita al menos una alternativa incorrecta
-
-                lista.Add(vm);
+                    Opcion2           = incorrectas.ElementAtOrDefault(0) ?? "",
+                    Opcion3           = incorrectas.ElementAtOrDefault(1).NullIfEmpty(),
+                    Opcion4           = incorrectas.ElementAtOrDefault(2).NullIfEmpty(),
+                });
             }
 
             return lista;
@@ -138,10 +166,11 @@ namespace SimulacroExamen.Services
             using var wb = new XLWorkbook();
             var ws = wb.Worksheets.Add("Preguntas");
 
-            // Encabezados: los marcados con * son obligatorios al importar
+            // Encabezados (mismo orden que el Excel de importación)
             string[] headers = {
-                "Pregunta *", "Respuesta Correcta *",
-                "Opción Incorrecta 2 *", "Opción Incorrecta 3", "Opción Incorrecta 4"
+                "Número", "La pregunta *",
+                "Opción A *", "Opción B *", "Opción C", "Opción D",
+                "Respuesta correcta *"
             };
 
             for (int i = 0; i < headers.Length; i++)
@@ -149,25 +178,41 @@ namespace SimulacroExamen.Services
                 var cell = ws.Cell(1, i + 1);
                 cell.Value = headers[i];
                 cell.Style.Font.Bold = true;
-                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#27ae60"); // Verde
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#27ae60");
                 cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             }
 
-            // Fila de ejemplo 1: pregunta con 4 alternativas
-            ws.Cell(2, 1).Value = "¿Cuál es la capital de Perú?";
-            ws.Cell(2, 2).Value = "Lima";
-            ws.Cell(2, 3).Value = "Cusco";
-            ws.Cell(2, 4).Value = "Arequipa";
-            ws.Cell(2, 5).Value = "Trujillo";
+            // Fila ejemplo 1: 4 opciones, respuesta A
+            ws.Cell(2, 1).Value = 1;
+            ws.Cell(2, 2).Value = "¿Cuál es la capital de Perú?";
+            ws.Cell(2, 3).Value = "Lima";
+            ws.Cell(2, 4).Value = "Cusco";
+            ws.Cell(2, 5).Value = "Arequipa";
+            ws.Cell(2, 6).Value = "Trujillo";
+            ws.Cell(2, 7).Value = "A";
 
-            // Fila de ejemplo 2: pregunta con solo 3 alternativas (Opción 4 vacía)
-            ws.Cell(3, 1).Value = "¿En qué año se fundó Lima?";
-            ws.Cell(3, 2).Value = "1535";
+            // Fila ejemplo 2: 3 opciones (D vacía), respuesta B
+            ws.Cell(3, 1).Value = 2;
+            ws.Cell(3, 2).Value = "¿En qué año se fundó Lima?";
             ws.Cell(3, 3).Value = "1521";
-            ws.Cell(3, 4).Value = "1548";
-            ws.Cell(3, 5).Value = ""; // Columna opcional puede ir vacía
+            ws.Cell(3, 4).Value = "1535";
+            ws.Cell(3, 5).Value = "1548";
+            ws.Cell(3, 6).Value = ""; // Opción D opcional
+            ws.Cell(3, 7).Value = "B";
 
-            ws.Columns().AdjustToContents();
+            // Nota aclaratoria en la fila 5
+            var nota = ws.Cell(5, 1);
+            nota.Value = "NOTA: La columna 'Respuesta correcta' debe contener la letra A, B, C o D que indica la opción correcta.";
+            nota.Style.Font.Italic = true;
+            nota.Style.Font.FontColor = XLColor.FromHtml("#c0392b");
+            ws.Range(5, 1, 5, 7).Merge();
+
+            ws.Column(2).Width = 50; // La pregunta más ancha
+            ws.Columns(1, 1).Width  = 10;
+            ws.Columns(3, 6).Width  = 20;
+            ws.Column(7).Width = 18;
+            ws.SheetView.FreezeRows(1);
 
             using var ms = new MemoryStream();
             wb.SaveAs(ms);

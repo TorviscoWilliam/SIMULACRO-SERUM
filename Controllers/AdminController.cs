@@ -13,27 +13,63 @@ namespace SimulacroExamen.Controllers
     {
         private readonly ApplicationDbContext _db;
         private readonly IExcelService        _excel;
+        private readonly IWebHostEnvironment  _env;
 
-        public AdminController(ApplicationDbContext db, IExcelService excel)
+        public AdminController(ApplicationDbContext db, IExcelService excel, IWebHostEnvironment env)
         {
             _db    = db;
             _excel = excel;
+            _env   = env;
         }
 
         // ── Dashboard ────────────────────────────────────────────────
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(DateTime? fecha, string? usuario)
         {
+            var hoy    = DateTime.Today;
+            var filtro = fecha.HasValue ? fecha.Value.Date : hoy;
+            var hace7  = hoy.AddDays(-6);
+
+            // Guardar filtros activos para la vista
+            ViewBag.FiltroFecha   = filtro.ToString("yyyy-MM-dd");   // formato input[type=date]
+            ViewBag.FiltroUsuario = usuario?.Trim() ?? string.Empty;
+            ViewBag.FiltroFechaStr = filtro.ToString("dd/MM/yyyy");
+            ViewBag.EsFiltrado    = filtro != hoy || !string.IsNullOrWhiteSpace(usuario);
+
+            // ── Stats generales (sin filtro) ─────────────────────────
             ViewBag.TotalUsuarios  = await _db.Usuarios.CountAsync(u => u.Rol == "Usuario" && u.Activo);
+            ViewBag.TotalAdmins    = await _db.Usuarios.CountAsync(u => u.Rol == "Admin"   && u.Activo);
             ViewBag.TotalPreguntas = await _db.Preguntas.CountAsync(p => p.Activo);
             ViewBag.TotalExamenes  = await _db.Examenes.CountAsync(e => e.Completado);
             ViewBag.PromedioGlobal = await _db.Examenes
                 .Where(e => e.Completado && e.TotalPreguntas > 0)
                 .AverageAsync(e => (double?)((double)e.Puntaje / e.TotalPreguntas * 100)) ?? 0;
 
-            // ── Datos para gráficos ──────────────────────────────────
-            var hoy   = DateTime.Today;
-            var hace7 = hoy.AddDays(-6);
+            // ── Stats del día filtrado ───────────────────────────────
+            ViewBag.ExamenesHoy = await _db.Examenes
+                .CountAsync(e => e.Completado && e.FechaFin.HasValue
+                              && e.FechaFin.Value.Date == filtro);
 
+            ViewBag.UsuariosActivosHoy = await _db.Examenes
+                .Where(e => e.Completado && e.FechaFin.HasValue && e.FechaFin.Value.Date == filtro)
+                .Select(e => e.UsuarioId)
+                .Distinct()
+                .CountAsync();
+
+            var totalFiltro = await _db.Examenes.CountAsync(
+                e => e.Completado && e.FechaFin.HasValue
+                  && e.FechaFin.Value.Date == filtro && e.TotalPreguntas > 0);
+            var aprobadosFiltro = await _db.Examenes.CountAsync(
+                e => e.Completado && e.FechaFin.HasValue && e.FechaFin.Value.Date == filtro
+                  && e.TotalPreguntas > 0 && (double)e.Puntaje / e.TotalPreguntas >= 0.60);
+            ViewBag.TasaAprobacionHoy = totalFiltro > 0
+                ? Math.Round((double)aprobadosFiltro / totalFiltro * 100, 1) : 0.0;
+
+            var mejorFiltro = await _db.Examenes
+                .Where(e => e.Completado && e.FechaFin.HasValue && e.FechaFin.Value.Date == filtro)
+                .MaxAsync(e => (int?)e.Puntaje) ?? 0;
+            ViewBag.MejorPuntajeHoyVigesimal = Math.Round(mejorFiltro * 0.2, 2);
+
+            // ── Gráfico de barras: exámenes últimos 7 días (siempre desde hoy) ──
             var examenesPorDia = await _db.Examenes
                 .Where(e => e.Completado && e.FechaFin.HasValue && e.FechaFin.Value >= hace7)
                 .GroupBy(e => e.FechaFin!.Value.Date)
@@ -46,6 +82,7 @@ namespace SimulacroExamen.Controllers
                 .Select(d => examenesPorDia.FirstOrDefault(x => x.Fecha == d)?.Cantidad ?? 0)
                 .ToArray();
 
+            // ── Gráfico de dona: preguntas por tipo ──────────────────
             var pregsPorTipo = await _db.Preguntas
                 .Where(p => p.Activo && p.TipoExamenId != null)
                 .GroupBy(p => p.TipoExamen!.Nombre)
@@ -56,6 +93,49 @@ namespace SimulacroExamen.Controllers
 
             ViewBag.TipoLabels = pregsPorTipo.Select(x => x.Tipo).ToArray();
             ViewBag.TipoCounts = pregsPorTipo.Select(x => x.Cantidad).ToArray();
+
+            // ── Top 10 con filtro de fecha y/o usuario ────────────────
+            var rankingQuery = _db.Examenes
+                .Where(e => e.Completado && e.FechaFin.HasValue
+                         && e.FechaFin.Value.Date == filtro && e.TotalPreguntas > 0)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(usuario))
+            {
+                var u = usuario.Trim().ToUpperInvariant();
+                rankingQuery = rankingQuery.Where(e => e.Usuario.NombreUsuario.Contains(u));
+            }
+
+            var rankingRaw = await rankingQuery
+                .Include(e => e.Usuario)
+                .Include(e => e.TipoExamen)
+                .OrderByDescending(e => e.Puntaje)
+                .ThenBy(e => e.FechaFin)
+                .Select(e => new TopRankingVM
+                {
+                    NombreUsuario    = e.Usuario.NombreUsuario,
+                    TipoExamen       = e.TipoExamen != null ? e.TipoExamen.Nombre : "Sin tipo",
+                    Puntaje          = e.Puntaje,
+                    TotalPreguntas   = e.TotalPreguntas,
+                    PuntajeVigesimal = Math.Round(e.Puntaje * 0.2, 2),
+                    Porcentaje       = Math.Round((double)e.Puntaje / e.TotalPreguntas * 100, 1),
+                    FechaFin         = e.FechaFin!.Value
+                })
+                .ToListAsync();
+
+            ViewBag.RankingPorTipo = rankingRaw
+                .GroupBy(r => r.TipoExamen)
+                .OrderBy(g => g.Key)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(r => r.Puntaje).ThenBy(r => r.FechaFin).Take(10).ToList()
+                );
+
+            ViewBag.RankingGeneral = rankingRaw
+                .OrderByDescending(r => r.Puntaje)
+                .ThenBy(r => r.FechaFin)
+                .Take(10)
+                .ToList();
 
             return View();
         }
@@ -68,7 +148,7 @@ namespace SimulacroExamen.Controllers
         {
             const int pageSize = 15;
 
-            var query = _db.Usuarios.Where(u => u.Rol == "Usuario");
+            var query = _db.Usuarios.AsQueryable();
             var total = await query.CountAsync();
 
             var usuarios = await query
@@ -87,7 +167,8 @@ namespace SimulacroExamen.Controllers
                     MejorPuntaje  = u.Examenes.Any(e => e.Completado)
                         ? u.Examenes.Where(e => e.Completado).Max(e => e.Puntaje)
                         : 0,
-                    TiposAsignados = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList()
+                    TiposAsignados = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList(),
+                    IntentosExtra  = u.IntentosExtra
                 })
                 .ToListAsync();
 
@@ -99,6 +180,21 @@ namespace SimulacroExamen.Controllers
             return View(usuarios);
         }
 
+        // POST /Admin/AjustarIntentos
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AjustarIntentos(int id, int intentosExtra)
+        {
+            var u = await _db.Usuarios.FindAsync(id);
+            if (u == null) return NotFound();
+
+            u.IntentosExtra = Math.Max(0, intentosExtra);
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = $"Intentos diarios de '{u.NombreUsuario}' actualizados a {5 + u.IntentosExtra}.";
+            return RedirectToAction(nameof(Usuarios));
+        }
+
         public IActionResult CrearUsuario() => View(new CrearUsuarioViewModel());
 
         [HttpPost]
@@ -108,30 +204,40 @@ namespace SimulacroExamen.Controllers
             if (!ModelState.IsValid)
                 return View(vm);
 
-            if (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == vm.NombreUsuario))
+            // Guardar nombre en MAYÚSCULAS
+            var nombreUpper = vm.NombreUsuario.Trim().ToUpperInvariant();
+
+            if (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == nombreUpper))
             {
                 ModelState.AddModelError(nameof(vm.NombreUsuario), "El nombre de usuario ya existe");
                 return View(vm);
             }
 
-            if (await _db.Usuarios.AnyAsync(u => u.Correo == vm.Correo))
+            if (await _db.Usuarios.AnyAsync(u => u.Correo == vm.Correo.Trim()))
             {
                 ModelState.AddModelError(nameof(vm.Correo), "El correo ya está registrado");
                 return View(vm);
             }
 
+            var rolValido = vm.Rol == "Admin" || vm.Rol == "Usuario";
+            if (!rolValido)
+            {
+                ModelState.AddModelError(nameof(vm.Rol), "Rol inválido");
+                return View(vm);
+            }
+
             _db.Usuarios.Add(new Usuario
             {
-                NombreUsuario = vm.NombreUsuario,
-                Correo        = vm.Correo,
+                NombreUsuario = nombreUpper,
+                Correo        = vm.Correo.Trim(),
                 Contrasena    = BCrypt.Net.BCrypt.HashPassword(vm.Contrasena),
-                Rol           = "Usuario",
+                Rol           = vm.Rol,
                 FechaCreacion = DateTime.Now,
                 Activo        = true
             });
 
             await _db.SaveChangesAsync();
-            TempData["Exito"] = $"Usuario '{vm.NombreUsuario}' creado correctamente.";
+            TempData["Exito"] = $"Usuario '{nombreUpper}' creado correctamente.";
             return RedirectToAction(nameof(Usuarios));
         }
 
@@ -140,7 +246,15 @@ namespace SimulacroExamen.Controllers
         public async Task<IActionResult> ToggleUsuario(int id)
         {
             var u = await _db.Usuarios.FindAsync(id);
-            if (u == null || u.Rol == "Admin") return NotFound();
+            if (u == null) return NotFound();
+
+            // No permitir desactivarse a uno mismo
+            var currentId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+            if (u.Id == currentId)
+            {
+                TempData["Error"] = "No puedes desactivar tu propia cuenta.";
+                return RedirectToAction(nameof(Usuarios));
+            }
 
             u.Activo = !u.Activo;
             await _db.SaveChangesAsync();
@@ -155,7 +269,6 @@ namespace SimulacroExamen.Controllers
         public async Task<IActionResult> ExportarUsuarios()
         {
             var usuarios = await _db.Usuarios
-                .Where(u => u.Rol == "Usuario")
                 .OrderBy(u => u.NombreUsuario)
                 .Select(u => new UsuarioListaViewModel
                 {
@@ -443,9 +556,31 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Preguntas));
             }
 
-            int guardadas = 0;
+            // Cargar textos existentes en BD para detectar duplicados (normalizado a minúsculas)
+            var existentesQuery = _db.Preguntas.Where(p => p.Activo);
+            if (tipoExamenId > 0)
+                existentesQuery = existentesQuery.Where(p => p.TipoExamenId == tipoExamenId);
+
+            var textosExistentes = (await existentesQuery.Select(p => p.TextoPregunta).ToListAsync())
+                .Select(t => t.Trim().ToLowerInvariant())
+                .ToHashSet();
+
+            int guardadas   = 0;
+            int duplicadas  = 0;
+
+            // También rastrear duplicados dentro del mismo archivo
+            var textosEnArchivo = new HashSet<string>();
+
             foreach (var vm in importadas)
             {
+                var textoNorm = vm.TextoPregunta.Trim().ToLowerInvariant();
+
+                if (textosExistentes.Contains(textoNorm) || !textosEnArchivo.Add(textoNorm))
+                {
+                    duplicadas++;
+                    continue;
+                }
+
                 var pregunta = new Pregunta
                 {
                     TextoPregunta = vm.TextoPregunta,
@@ -468,7 +603,15 @@ namespace SimulacroExamen.Controllers
             }
 
             await _db.SaveChangesAsync();
-            TempData["Exito"] = $"Se importaron {guardadas} pregunta(s) correctamente.";
+
+            if (duplicadas > 0)
+                TempData["Advertencia"] = $"{duplicadas} pregunta(s) omitida(s) por estar duplicadas.";
+
+            if (guardadas > 0)
+                TempData["Exito"] = $"Se importaron {guardadas} pregunta(s) correctamente.";
+            else
+                TempData["Error"] = "No se importó ninguna pregunta nueva (todas eran duplicadas).";
+
             return RedirectToAction(nameof(Preguntas));
         }
 
@@ -557,6 +700,107 @@ namespace SimulacroExamen.Controllers
                 : $"Tipo '{tipo.Nombre}' desactivado.";
 
             return RedirectToAction(nameof(TiposExamen));
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  NOTICIAS
+        // ═══════════════════════════════════════════════════════════
+
+        public async Task<IActionResult> Noticias()
+        {
+            var noticias = await _db.Noticias
+                .Include(n => n.Admin)
+                .OrderByDescending(n => n.FechaPublicacion)
+                .Select(n => new NoticiaListaVM
+                {
+                    Id               = n.Id,
+                    Titulo           = n.Titulo,
+                    Contenido        = n.Contenido,
+                    ImagenRuta       = n.ImagenRuta,
+                    FechaPublicacion = n.FechaPublicacion,
+                    AdminNombre      = n.Admin != null ? n.Admin.NombreUsuario : "",
+                    Activo           = n.Activo
+                })
+                .ToListAsync();
+
+            return View(noticias);
+        }
+
+        public IActionResult CrearNoticia() => View(new CrearNoticiaViewModel());
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CrearNoticia(CrearNoticiaViewModel vm)
+        {
+            if (!ModelState.IsValid) return View(vm);
+
+            string? imagenRuta = null;
+            if (vm.Imagen != null && vm.Imagen.Length > 0)
+            {
+                var ext = Path.GetExtension(vm.Imagen.FileName).ToLowerInvariant();
+                var extsPermitidas = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+                if (!extsPermitidas.Contains(ext))
+                {
+                    ModelState.AddModelError("Imagen", "Solo se permiten imágenes (.jpg, .png, .gif, .webp).");
+                    return View(vm);
+                }
+
+                const long maxSize = 5 * 1024 * 1024; // 5 MB
+                if (vm.Imagen.Length > maxSize)
+                {
+                    ModelState.AddModelError("Imagen", "La imagen no puede superar 5 MB.");
+                    return View(vm);
+                }
+
+                var uploadsDir = Path.Combine(_env.WebRootPath, "uploads", "noticias");
+                Directory.CreateDirectory(uploadsDir);
+
+                var fileName = $"{Guid.NewGuid()}{ext}";
+                var filePath = Path.Combine(uploadsDir, fileName);
+
+                await using var stream = new FileStream(filePath, FileMode.Create);
+                await vm.Imagen.CopyToAsync(stream);
+
+                imagenRuta = $"/uploads/noticias/{fileName}";
+            }
+
+            var adminId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+
+            _db.Noticias.Add(new Noticia
+            {
+                Titulo           = vm.Titulo.Trim(),
+                Contenido        = vm.Contenido.Trim(),
+                ImagenRuta       = imagenRuta,
+                FechaPublicacion = DateTime.Now,
+                AdminId          = adminId,
+                Activo           = true
+            });
+
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = "Noticia publicada correctamente.";
+            return RedirectToAction(nameof(Noticias));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EliminarNoticia(int id)
+        {
+            var n = await _db.Noticias.FindAsync(id);
+            if (n == null) return NotFound();
+
+            // Eliminar imagen del disco si existe
+            if (!string.IsNullOrEmpty(n.ImagenRuta))
+            {
+                var filePath = Path.Combine(_env.WebRootPath, n.ImagenRuta.TrimStart('/'));
+                if (System.IO.File.Exists(filePath))
+                    System.IO.File.Delete(filePath);
+            }
+
+            _db.Noticias.Remove(n);
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = "Noticia eliminada.";
+            return RedirectToAction(nameof(Noticias));
         }
     }
 }

@@ -10,10 +10,13 @@ namespace SimulacroExamen.ViewModels
         public int      ExamenId         { get; set; }
         public string   TipoExamenNombre { get; set; } = string.Empty;
 
-        /// <summary>Número de respuestas correctas (1 punto cada una).</summary>
-        public int      Puntaje         { get; set; }
+        /// <summary>Número de respuestas correctas.</summary>
+        public int      Puntaje          { get; set; }
 
-        /// <summary>Total de preguntas que contenía el examen (puede ser menor que NumeroPreguntas si hay pocas en la BD).</summary>
+        /// <summary>Puntaje en escala vigesimal (correctas × 0.2).</summary>
+        public double   PuntajeVigesimal { get; set; }
+
+        /// <summary>Total de preguntas que contenía el examen.</summary>
         public int      TotalPreguntas  { get; set; }
 
         /// <summary>
@@ -33,6 +36,17 @@ namespace SimulacroExamen.ViewModels
         /// Calculado en el ViewModel como FechaFin − FechaInicio (no persiste en la BD).
         /// </summary>
         public TimeSpan Duracion        => FechaFin - FechaInicio;
+
+        /// <summary>
+        /// Nota ponderada del usuario (0–20) configurada en su perfil. Null si no la configuró.
+        /// </summary>
+        public double? NotaPonderada { get; set; }
+
+        /// <summary>
+        /// Nota final ponderada: PuntajeVigesimal * 0.70 + NotaPonderada * 0.30.
+        /// Null si el usuario no tiene nota ponderada configurada.
+        /// </summary>
+        public double? NotaFinal { get; set; }
 
         /// <summary>
         /// Lista de detalles por pregunta, en el mismo orden en que aparecieron durante el examen.

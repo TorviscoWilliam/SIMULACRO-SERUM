@@ -73,6 +73,11 @@
                                     <i class="bi bi-mortarboard me-1"></i>Tipos
                                 </a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Admin" asp-action="Noticias">
+                                    <i class="bi bi-megaphone me-1"></i>Noticias
+                                </a>
+                            </li>
                         }
                         else
                         {
@@ -84,6 +89,16 @@
                             <li class="nav-item">
                                 <a class="nav-link" asp-controller="Examen" asp-action="Historial">
                                     <i class="bi bi-clock-history me-1"></i>Mi Historial
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Examen" asp-action="Noticias">
+                                    <i class="bi bi-megaphone me-1"></i>Noticias
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Examen" asp-action="Configuracion">
+                                    <i class="bi bi-gear me-1"></i>Configuración
                                 </a>
                             </li>
                         }
@@ -132,6 +147,15 @@
             <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
                 <i class="bi bi-exclamation-triangle-fill me-2"></i>
                 <span>@TempData["Error"]</span>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        @if (TempData["Advertencia"] != null)
+        {
+            <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center" role="alert">
+                <i class="bi bi-exclamation-circle-fill me-2"></i>
+                <span>@TempData["Advertencia"]</span>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         }

@@ -63,12 +63,15 @@ using (var scope = app.Services.CreateScope())
     // DROP ejecutado), verificamos la tabla Usuarios y recreamos si es necesario.
     InicializarBD(context);
 
+    // Migrar columnas nuevas que no existían en versiones anteriores
+    MigrarEsquema(context);
+
     // Sembrar administrador por defecto (contraseña cifrada con BCrypt)
     if (!context.Usuarios.Any(u => u.Rol == "Admin"))
     {
         context.Usuarios.Add(new Usuario
         {
-            NombreUsuario = "admin",
+            NombreUsuario = "ADMIN",
             Correo        = "admin@simulacro.com",
             Contrasena    = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
             Rol           = "Admin",
@@ -111,6 +114,55 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+// ── Helper: agregar columnas/tablas nuevas sin romper la BD existente ────
+static void MigrarEsquema(ApplicationDbContext context)
+{
+    try
+    {
+        var conn = context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            conn.Open();
+
+        void Exec(string sql)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.ExecuteNonQuery();
+        }
+
+        // Columna NotaPonderada en Usuarios
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='NotaPonderada')
+               ALTER TABLE Usuarios ADD NotaPonderada float NULL");
+
+        // Columna IntentosExtra en Usuarios
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='IntentosExtra')
+               ALTER TABLE Usuarios ADD IntentosExtra int NOT NULL DEFAULT 0");
+
+        // Tabla Noticias
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='Noticias')
+               CREATE TABLE Noticias (
+                   Id                INT IDENTITY(1,1) PRIMARY KEY,
+                   Titulo            NVARCHAR(200)    NOT NULL,
+                   Contenido         NVARCHAR(MAX)    NOT NULL,
+                   ImagenRuta        NVARCHAR(500)    NULL,
+                   FechaPublicacion  DATETIME2        NOT NULL DEFAULT GETDATE(),
+                   AdminId           INT              NOT NULL,
+                   Activo            BIT              NOT NULL DEFAULT 1,
+                   CONSTRAINT FK_Noticias_Usuarios FOREIGN KEY (AdminId)
+                       REFERENCES Usuarios(Id) ON DELETE NO ACTION
+               )");
+
+        conn.Close();
+    }
+    catch { /* Si falla la migración opcional, no bloquear el inicio */ }
+}
 
 // ── Helper: crear esquema desde cero si las tablas no existen ────
 static void InicializarBD(ApplicationDbContext context)

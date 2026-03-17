@@ -4,6 +4,7 @@
     int page       = (int)ViewBag.Page;
     int totalPages = (int)ViewBag.TotalPages;
     int totalItems = (int)ViewBag.TotalItems;
+    var currentUserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -38,9 +39,11 @@
                     <th>#</th>
                     <th>Usuario</th>
                     <th>Correo</th>
+                    <th class="text-center">Rol</th>
                     <th>Tipos de Examen</th>
                     <th class="text-center">Exámenes</th>
                     <th class="text-center">Mejor Puntaje</th>
+                    <th class="text-center">Límite/día</th>
                     <th class="text-center">Estado</th>
                     <th class="text-center">Acciones</th>
                 </tr>
@@ -62,8 +65,22 @@
                             </div>
                         </td>
                         <td class="text-muted small">@u.Correo</td>
+                        <td class="text-center">
+                            @if (u.Rol == "Admin")
+                            {
+                                <span class="badge bg-danger"><i class="bi bi-shield-fill me-1"></i>Admin</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-info text-dark"><i class="bi bi-mortarboard me-1"></i>Estudiante</span>
+                            }
+                        </td>
                         <td>
-                            @if (u.TiposAsignados.Any())
+                            @if (u.Rol == "Admin")
+                            {
+                                <span class="text-muted small fst-italic">N/A</span>
+                            }
+                            else if (u.TiposAsignados.Any())
                             {
                                 <div class="d-flex flex-wrap gap-1">
                                     @foreach (var tipo in u.TiposAsignados)
@@ -86,6 +103,23 @@
                         </td>
                         <td class="text-center fw-bold">@u.MejorPuntaje</td>
                         <td class="text-center">
+                            @if (u.Rol != "Admin")
+                            {
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-secondary btn-ajustar-intentos"
+                                        data-id="@u.Id"
+                                        data-nombre="@u.NombreUsuario"
+                                        data-intentos="@u.IntentosExtra"
+                                        title="Ajustar intentos diarios">
+                                    <i class="bi bi-plus-slash-minus me-1"></i>@(5 + u.IntentosExtra)
+                                </button>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">N/A</span>
+                            }
+                        </td>
+                        <td class="text-center">
                             @if (u.Activo)
                             {
                                 <span class="badge bg-success"><i class="bi bi-check2 me-1"></i>Activo</span>
@@ -97,26 +131,36 @@
                         </td>
                         <td class="text-center">
                             <div class="d-flex gap-1 justify-content-center">
-                                <a asp-action="AsignarAcceso" asp-route-id="@u.Id"
-                                   class="btn btn-sm btn-outline-info" title="Gestionar acceso">
-                                    <i class="bi bi-key me-1"></i>Acceso
-                                </a>
-                                <form asp-action="ToggleUsuario" method="post"
-                                      onsubmit="return confirm('@(u.Activo ? "¿Desactivar" : "¿Activar") al usuario @u.NombreUsuario?')">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="id" value="@u.Id"/>
-                                    <button type="submit"
-                                            class="btn btn-sm @(u.Activo ? "btn-outline-danger" : "btn-outline-success")">
-                                        @if (u.Activo)
-                                        {
-                                            <i class="bi bi-person-x"></i>
-                                        }
-                                        else
-                                        {
-                                            <i class="bi bi-person-check"></i>
-                                        }
-                                    </button>
-                                </form>
+                                @if (u.Rol != "Admin")
+                                {
+                                    <a asp-action="AsignarAcceso" asp-route-id="@u.Id"
+                                       class="btn btn-sm btn-outline-info" title="Gestionar acceso">
+                                        <i class="bi bi-key me-1"></i>Acceso
+                                    </a>
+                                }
+                                @if (u.Id != currentUserId)
+                                {
+                                    <form asp-action="ToggleUsuario" method="post"
+                                          onsubmit="return confirm('@(u.Activo ? "¿Desactivar" : "¿Activar") al usuario @u.NombreUsuario?')">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@u.Id"/>
+                                        <button type="submit"
+                                                class="btn btn-sm @(u.Activo ? "btn-outline-danger" : "btn-outline-success")">
+                                            @if (u.Activo)
+                                            {
+                                                <i class="bi bi-person-x"></i>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-person-check"></i>
+                                            }
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small" title="Tu cuenta actual"><i class="bi bi-person-badge"></i></span>
+                                }
                             </div>
                         </td>
                     </tr>
@@ -125,7 +169,7 @@
                 @if (!Model.Any())
                 {
                     <tr>
-                        <td colspan="8" class="text-center py-5 text-muted">
+                        <td colspan="10" class="text-center py-5 text-muted">
                             <i class="bi bi-people fs-1 d-block mb-2"></i>
                             No hay usuarios registrados. <a asp-action="CrearUsuario">Crear el primero</a>
                         </td>
@@ -133,6 +177,35 @@
                 }
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Modal único para ajustar intentos (fuera de la tabla) -->
+<div class="modal fade" id="modalAjustarIntentos" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-plus-slash-minus me-2"></i>Intentos diarios</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form asp-action="AjustarIntentos" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="intentosUsuarioId" name="id" value=""/>
+                <div class="modal-body">
+                    <p class="mb-2 fw-semibold" id="intentosNombreUsuario"></p>
+                    <label class="form-label small">Intentos extra (base 5)</label>
+                    <input type="number" id="intentosExtraInput" name="intentosExtra"
+                           min="0" max="100" class="form-control"/>
+                    <div class="form-text">Límite diario total = 5 + extras</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="bi bi-floppy me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -163,10 +236,22 @@
 
 @section Scripts {
 <script>
+    // Filtro de búsqueda en tabla
     document.getElementById('busqueda').addEventListener('input', function () {
         const q = this.value.toLowerCase();
         document.querySelectorAll('#tablaUsuarios tbody tr').forEach(function (row) {
             row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
+
+    // Modal ajustar intentos: poblar con datos del botón clickeado
+    document.querySelectorAll('.btn-ajustar-intentos').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('intentosUsuarioId').value   = this.dataset.id;
+            document.getElementById('intentosNombreUsuario').textContent = this.dataset.nombre;
+            document.getElementById('intentosExtraInput').value  = this.dataset.intentos;
+            var modal = new bootstrap.Modal(document.getElementById('modalAjustarIntentos'));
+            modal.show();
         });
     });
 </script>

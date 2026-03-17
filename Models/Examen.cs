@@ -31,6 +31,9 @@ namespace SimulacroExamen.Models
             ? Math.Round((double)Puntaje / TotalPreguntas * 100, 1)
             : 0;
 
+        /// <summary>Puntaje vigesimal: cada pregunta correcta vale 0.2 puntos (máx 20 en 100 preguntas).</summary>
+        public double PuntajeVigesimal => Math.Round(Puntaje * 0.2, 2);
+
         public ICollection<PreguntaExamen> PreguntasExamen { get; set; } = new List<PreguntaExamen>();
     }
 }

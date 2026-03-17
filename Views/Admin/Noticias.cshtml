@@ -1,0 +1,60 @@
+@model List<SimulacroExamen.ViewModels.NoticiaListaVM>
+@{
+    ViewData["Title"] = "Noticias";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0"><i class="bi bi-megaphone me-2 text-primary"></i>Noticias</h2>
+        <p class="text-muted mb-0">@Model.Count noticia(s) publicada(s)</p>
+    </div>
+    <a asp-action="CrearNoticia" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Nueva Noticia
+    </a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5 text-muted">
+            <i class="bi bi-newspaper fs-1 d-block mb-2"></i>
+            <p>Aún no has publicado ninguna noticia.</p>
+            <a asp-action="CrearNoticia" class="btn btn-primary">Crear primera noticia</a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        @foreach (var n in Model)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm h-100 @(n.Activo ? "" : "opacity-50")">
+                    @if (!string.IsNullOrEmpty(n.ImagenRuta))
+                    {
+                        <img src="@n.ImagenRuta" class="card-img-top object-fit-cover" style="height:180px" alt="@n.Titulo" />
+                    }
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="fw-bold card-title">@n.Titulo</h5>
+                        <p class="card-text text-muted small flex-grow-1"
+                           style="white-space:pre-line;max-height:100px;overflow:hidden">@n.Contenido</p>
+                        <div class="d-flex justify-content-between align-items-center mt-2 small text-muted">
+                            <span><i class="bi bi-calendar me-1"></i>@n.FechaPublicacion.ToString("dd/MM/yyyy")</span>
+                            <span><i class="bi bi-person me-1"></i>@n.AdminNombre</span>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white d-flex justify-content-end gap-2">
+                        <form asp-action="EliminarNoticia" method="post"
+                              onsubmit="return confirm('¿Eliminar esta noticia?')">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@n.Id"/>
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash me-1"></i>Eliminar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}

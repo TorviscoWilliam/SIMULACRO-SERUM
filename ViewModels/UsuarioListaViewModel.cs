@@ -44,6 +44,9 @@ namespace SimulacroExamen.ViewModels
         /// <summary>Nombres de los tipos de examen asignados a este usuario.</summary>
         public List<string> TiposAsignados  { get; set; } = new();
 
+        /// <summary>Intentos de examen extra otorgados por un admin (límite diario = 5 + IntentosExtra).</summary>
+        public int IntentosExtra { get; set; }
+
         // ── Propiedades calculadas (no persistidas en BD) ──────────────
 
         /// <summary>

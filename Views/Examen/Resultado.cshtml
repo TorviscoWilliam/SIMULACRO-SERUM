@@ -19,31 +19,60 @@
                 </span>
                 <h2 class="fw-bold mb-1">@mensajeMain</h2>
 
-                <!-- Puntaje grande -->
+                <!-- Puntaje vigesimal grande -->
                 <div class="my-4">
-                    <span class="display-3 fw-bold">@Model.Puntaje</span>
-                    <span class="fs-4 text-muted"> / @Model.TotalPreguntas</span>
+                    <span class="display-3 fw-bold">@Model.PuntajeVigesimal.ToString("0.##")</span>
+                    <span class="fs-4 text-muted"> / 20</span>
+                </div>
+                <div class="text-muted small mb-2">
+                    @Model.Puntaje correctas de @Model.TotalPreguntas preguntas
                 </div>
 
                 <span class="badge @badgeClass fs-5 px-4 py-2 mb-4 rounded-pill">
                     @Model.Porcentaje.ToString("0.0")%
                 </span>
 
+                <!-- Nota final ponderada -->
+                @if (Model.NotaFinal.HasValue)
+                {
+                    <div class="alert alert-info border-0 shadow-sm mx-auto mb-3" style="max-width:420px">
+                        <div class="d-flex align-items-center justify-content-between gap-3">
+                            <div class="text-start">
+                                <div class="fw-bold">Nota Final Ponderada</div>
+                                <div class="small text-muted">
+                                    Examen 70%&nbsp;·&nbsp;Ponderada 30%
+                                    (base: @Model.NotaPonderada!.Value.ToString("0.##")/20)
+                                </div>
+                            </div>
+                            <span class="display-6 fw-bold text-primary">
+                                @Model.NotaFinal.Value.ToString("0.##")
+                                <span class="fs-5 text-muted fw-normal">/ 20</span>
+                            </span>
+                        </div>
+                    </div>
+                }
+
                 <!-- Detalles -->
                 <div class="row g-3 mt-2">
-                    <div class="col-sm-4">
+                    <div class="col-sm-3">
                         <div class="bg-success-subtle rounded-3 p-3">
                             <div class="fw-bold fs-4 text-success">@Model.Puntaje</div>
                             <div class="small text-muted">Correctas</div>
                         </div>
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-3">
                         <div class="bg-danger-subtle rounded-3 p-3">
                             <div class="fw-bold fs-4 text-danger">@(Model.TotalPreguntas - Model.Puntaje)</div>
                             <div class="small text-muted">Incorrectas</div>
                         </div>
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-3">
+                        <div class="bg-primary-subtle rounded-3 p-3">
+                            <div class="fw-bold fs-4 text-primary">@Model.PuntajeVigesimal.ToString("0.##")</div>
+                            <div class="small text-muted">Pts (/ 20)</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-3">
                         <div class="bg-info-subtle rounded-3 p-3">
                             <div class="fw-bold fs-4 text-info">
                                 @((int)Model.Duracion.TotalMinutes)m @(Model.Duracion.Seconds)s
@@ -97,7 +126,7 @@
                                 </p>
                                 @if (d.EsCorrecta)
                                 {
-                                    <span class="badge bg-success ms-2">+1 pt</span>
+                                    <span class="badge bg-success ms-2">+0.2 pts</span>
                                 }
                                 else
                                 {

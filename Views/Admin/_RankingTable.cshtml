@@ -1,0 +1,70 @@
+@model List<SimulacroExamen.ViewModels.TopRankingVM>
+@{
+    var medals = new[] { "bi-trophy-fill text-warning", "bi-award-fill text-secondary", "bi-award-fill text-danger" };
+}
+
+<div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+            <tr>
+                <th class="text-center" style="width:3rem">#</th>
+                <th>Usuario</th>
+                <th>Tipo de Examen</th>
+                <th class="text-center">Puntaje (/ 20)</th>
+                <th class="text-center">Correctas</th>
+                <th class="text-center">%</th>
+                <th class="text-end text-muted small">Hora</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (int i = 0; i < Model.Count; i++)
+            {
+                var r    = Model[i];
+                var rank = i + 1;
+                string rowClass = rank == 1 ? "table-warning" : rank == 2 ? "table-light" : rank == 3 ? "table-danger" : "";
+                string badgeClass = r.Porcentaje >= 60
+                    ? "bg-success" : r.Porcentaje >= 40 ? "bg-warning text-dark" : "bg-danger";
+
+                <tr class="@rowClass">
+                    <td class="text-center fw-bold">
+                        @if (rank <= 3)
+                        {
+                            <i class="bi @medals[rank - 1] fs-5"></i>
+                        }
+                        else
+                        {
+                            <span class="text-muted">@rank</span>
+                        }
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
+                                 style="width:2rem;height:2rem;font-size:.7rem">
+                                @r.NombreUsuario.Substring(0, Math.Min(2, r.NombreUsuario.Length))
+                            </div>
+                            <span class="fw-semibold small">@r.NombreUsuario</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle small">
+                            @r.TipoExamen
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <span class="fw-bold fs-6">@r.PuntajeVigesimal.ToString("0.##")</span>
+                        <span class="text-muted small"> / 20</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="small">@r.Puntaje / @r.TotalPreguntas</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge @badgeClass rounded-pill">@r.Porcentaje.ToString("0.0")%</span>
+                    </td>
+                    <td class="text-end text-muted small">
+                        @r.FechaFin.ToString("HH:mm")
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

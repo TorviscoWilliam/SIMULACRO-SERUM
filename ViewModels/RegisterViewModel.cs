@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace SimulacroExamen.ViewModels
 {
-    public class CrearUsuarioViewModel
+    public class RegisterViewModel
     {
         [Required(ErrorMessage = "El nombre de usuario es obligatorio")]
         [MaxLength(100)]
@@ -25,9 +25,5 @@ namespace SimulacroExamen.ViewModels
         [Compare(nameof(Contrasena), ErrorMessage = "Las contraseñas no coinciden")]
         [Display(Name = "Confirmar Contraseña")]
         public string ConfirmarContrasena { get; set; } = string.Empty;
-
-        [Required(ErrorMessage = "Seleccione un rol")]
-        [Display(Name = "Rol")]
-        public string Rol { get; set; } = "Usuario";
     }
 }

@@ -2,65 +2,73 @@
 @{
     ViewData["Title"] = "Examen en Curso";
     Layout = "_Layout";
+    int totalPregs   = Model.Preguntas.Count;
+    int segRestantes = (int)(ViewBag.SegundosRestantes ?? 3600);
 }
 
 <div class="row justify-content-center">
     <div class="col-lg-9">
 
-        <!-- Encabezado del examen -->
-        <div class="card border-0 shadow-sm mb-4 border-start border-primary border-4">
-            <div class="card-body py-3 d-flex align-items-center justify-content-between">
+        <!-- Encabezado -->
+        <div class="card border-0 shadow-sm mb-3 border-start border-primary border-4">
+            <div class="card-body py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
-                    <h4 class="fw-bold mb-0">
+                    <h5 class="fw-bold mb-0">
                         <i class="bi bi-journal-text me-2 text-primary"></i>
                         @(!string.IsNullOrEmpty(Model.TipoExamenNombre) ? Model.TipoExamenNombre : "Simulacro de Examen")
-                    </h4>
-                    <p class="text-muted small mb-0">
-                        @Model.Preguntas.Count pregunta(s) • Responde todas antes de enviar
-                    </p>
+                    </h5>
+                    <p class="text-muted small mb-0">@totalPregs pregunta(s)</p>
                 </div>
-                <div class="text-end">
-                    <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
-                        <i class="bi bi-stopwatch me-1"></i>
-                        <span id="cronometro">00:00</span>
-                    </div>
+                <div id="timerBox" class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
+                    <i class="bi bi-stopwatch me-1"></i>
+                    <span id="cronometro">--:--</span>
                 </div>
             </div>
         </div>
 
-        <!-- Progreso -->
+        <!-- Botones de navegación rápida -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex flex-wrap gap-1 align-items-center">
+                    <span class="text-muted small me-2">Ir a:</span>
+                    @for (int i = 0; i < totalPregs; i++)
+                    {
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary nav-num"
+                                id="navBtn_@i"
+                                onclick="irPregunta(@i)">@(i + 1)</button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Barra de progreso -->
         <div class="mb-3">
             <div class="d-flex justify-content-between small text-muted mb-1">
-                <span>Progreso</span>
-                <span id="progTexto">0 / @Model.Preguntas.Count respondidas</span>
+                <span id="progTexto">0 / @totalPregs respondidas</span>
+                <span id="contadorPregunta">Pregunta 1 de @totalPregs</span>
             </div>
             <div class="progress" style="height:8px">
-                <div class="progress-bar bg-primary" id="barraProgreso"
-                     style="width:0%" role="progressbar"></div>
+                <div class="progress-bar bg-primary" id="barraProgreso" style="width:0%"></div>
             </div>
         </div>
 
         <!-- Formulario del examen -->
-        <form id="formExamen" asp-controller="Examen" asp-action="Enviar"
-              method="post" onsubmit="return validarExamen()">
+        <form id="formExamen" asp-controller="Examen" asp-action="Enviar" method="post">
             @Html.AntiForgeryToken()
             <input type="hidden" name="ExamenId" value="@Model.ExamenId"/>
 
-            @for (int i = 0; i < Model.Preguntas.Count; i++)
+            @for (int i = 0; i < totalPregs; i++)
             {
                 var pvm = Model.Preguntas[i];
-                <div class="card border-0 shadow-sm mb-3 pregunta-card" id="tarjeta_@pvm.PreguntaExamenId">
+                <div class="card border-0 shadow-sm mb-3 pregunta-card @(i == 0 ? "" : "d-none")"
+                     id="card_@i">
                     <div class="card-body p-4">
-                        <!-- Número y pregunta -->
                         <div class="d-flex gap-3 mb-3">
-                            <span class="badge bg-primary rounded-circle d-flex align-items-center justify-content-center"
-                                  style="width:2rem;height:2rem;min-width:2rem;font-size:.85rem">
-                                @(i + 1)
-                            </span>
+                            <span class="badge bg-primary rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                                  style="width:2rem;height:2rem;font-size:.85rem">@(i + 1)</span>
                             <p class="fw-semibold mb-0 fs-6">@pvm.TextoPregunta</p>
                         </div>
-
-                        <!-- Alternativas -->
                         <div class="ps-5">
                             @foreach (var alt in pvm.Alternativas)
                             {
@@ -70,8 +78,7 @@
                                            name="respuesta_@pvm.PreguntaExamenId"
                                            id="alt_@alt.Id"
                                            value="@alt.Id"
-                                           data-card="tarjeta_@pvm.PreguntaExamenId"
-                                           onchange="marcarRespondida(this)"/>
+                                           onchange="marcarRespondida(@i)"/>
                                     <label class="form-check-label alternativa-label w-100 p-2 rounded"
                                            for="alt_@alt.Id">
                                         @alt.TextoAlternativa
@@ -83,93 +90,200 @@
                 </div>
             }
 
-            <!-- Botón enviar -->
-            <div class="card border-0 shadow-sm mt-4">
-                <div class="card-body p-4 d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="fw-semibold">¿Listo para enviar?</span>
-                        <div class="text-muted small" id="aviso">
-                            Responde todas las preguntas antes de enviar.
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-success btn-lg px-5">
-                        <i class="bi bi-send me-2"></i>Enviar Examen
-                    </button>
-                </div>
+            <!-- Controles de navegación Anterior / Enviar / Siguiente -->
+            <div class="d-flex align-items-center justify-content-between mt-3 gap-2">
+                <button type="button" id="btnAnterior" class="btn btn-outline-secondary"
+                        onclick="navAnterior()" disabled>
+                    <i class="bi bi-arrow-left me-1"></i>Anterior
+                </button>
+
+                <button type="button" class="btn btn-success px-4"
+                        data-bs-toggle="modal" data-bs-target="#modalEnviar"
+                        onclick="prepararModal()">
+                    <i class="bi bi-send me-2"></i>Enviar Examen
+                </button>
+
+                <button type="button" id="btnSiguiente" class="btn btn-primary"
+                        onclick="navSiguiente()">
+                    Siguiente<i class="bi bi-arrow-right ms-1"></i>
+                </button>
             </div>
         </form>
 
     </div>
 </div>
 
+<!-- ── Modal: confirmar envío ──────────────────────────────────── -->
+<div class="modal fade" id="modalEnviar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-send me-2 text-success"></i>Enviar Examen
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <p id="modalMensaje" class="mb-2"></p>
+                <div id="modalAdvertencia" class="alert alert-warning py-2 small d-none">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <span id="modalAdvertenciaTexto"></span>
+                </div>
+                <p class="text-muted small mb-0">
+                    Una vez enviado, no podrás modificar tus respuestas.
+                </p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-pencil me-1"></i>Seguir Revisando
+                </button>
+                <button type="button" class="btn btn-success" onclick="enviarExamen()">
+                    <i class="bi bi-check-lg me-1"></i>Confirmar Envío
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: alerta 15 minutos ────────────────────────────────── -->
+<div class="modal fade" id="modalAlerta15" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 border-top border-warning border-3 shadow">
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-alarm text-warning d-block mb-3" style="font-size:3rem"></i>
+                <h5 class="fw-bold">¡Solo quedan 15 minutos!</h5>
+                <p class="text-muted mb-0">
+                    El examen se enviará automáticamente al terminar el tiempo.
+                </p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center">
+                <button type="button" class="btn btn-warning px-4" data-bs-dismiss="modal">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
-    const totalPreguntas = @Model.Preguntas.Count;
-    let respondidas = 0;
+    const TOTAL_PREGS  = @totalPregs;
+    let respondidas    = new Array(TOTAL_PREGS).fill(false);
+    let preguntaActual = 0;
+    let examEnviado    = false;
 
-    // Cronómetro
-    let segundos = 0;
-    const crono = setInterval(() => {
-        segundos++;
-        const m = String(Math.floor(segundos / 60)).padStart(2, '0');
-        const s = String(segundos % 60).padStart(2, '0');
-        document.getElementById('cronometro').textContent = m + ':' + s;
-    }, 1000);
+    // ── Navegación ───────────────────────────────────────────────
+    function irPregunta(idx) {
+        document.getElementById('card_' + preguntaActual).classList.add('d-none');
+        preguntaActual = idx;
+        document.getElementById('card_' + preguntaActual).classList.remove('d-none');
+        actualizarUI();
+    }
+    function navAnterior() { if (preguntaActual > 0) irPregunta(preguntaActual - 1); }
+    function navSiguiente() { if (preguntaActual < TOTAL_PREGS - 1) irPregunta(preguntaActual + 1); }
 
-    // Bandera que se activa al enviar el formulario para suprimir la advertencia
-    let examEnviado = false;
+    function actualizarUI() {
+        document.getElementById('btnAnterior').disabled  = (preguntaActual === 0);
+        document.getElementById('btnSiguiente').disabled = (preguntaActual === TOTAL_PREGS - 1);
+        document.getElementById('contadorPregunta').textContent =
+            'Pregunta ' + (preguntaActual + 1) + ' de ' + TOTAL_PREGS;
 
-    function marcarRespondida(radio) {
-        const cardId = radio.dataset.card;
-        const card   = document.getElementById(cardId);
+        // Colorear botones de navegación rápida
+        document.querySelectorAll('.nav-num').forEach((btn, idx) => {
+            btn.className = 'btn btn-sm nav-num ' + (
+                idx === preguntaActual   ? 'btn-primary' :
+                respondidas[idx]        ? 'btn-success'  :
+                                          'btn-outline-secondary'
+            );
+        });
+    }
 
-        if (!card.classList.contains('respondida')) {
-            card.classList.add('respondida');
-            respondidas++;
-            actualizarProgreso();
-        }
+    // ── Al seleccionar respuesta ─────────────────────────────────
+    function marcarRespondida(idx) {
+        respondidas[idx] = true;
+        const totalResp = respondidas.filter(Boolean).length;
+        document.getElementById('barraProgreso').style.width =
+            (totalResp / TOTAL_PREGS * 100) + '%';
+        document.getElementById('progTexto').textContent =
+            totalResp + ' / ' + TOTAL_PREGS + ' respondidas';
 
         // Resaltar alternativa seleccionada
+        const card = document.getElementById('card_' + idx);
         card.querySelectorAll('.alternativa-label').forEach(l => l.classList.remove('seleccionada'));
-        radio.nextElementSibling.classList.add('seleccionada');
+        card.querySelectorAll('.respuesta-radio').forEach(r => {
+            if (r.checked) r.nextElementSibling.classList.add('seleccionada');
+        });
+
+        actualizarUI();
+
+        // Avanzar automáticamente a la siguiente pregunta (pequeño delay)
+        if (idx < TOTAL_PREGS - 1) setTimeout(() => irPregunta(idx + 1), 350);
     }
 
-    function actualizarProgreso() {
-        const pct = (respondidas / totalPreguntas) * 100;
-        document.getElementById('barraProgreso').style.width = pct + '%';
-        document.getElementById('progTexto').textContent =
-            respondidas + ' / ' + totalPreguntas + ' respondidas';
-
-        if (respondidas === totalPreguntas) {
-            document.getElementById('aviso').textContent = '✓ Todas respondidas. Puedes enviar.';
-            document.getElementById('aviso').className = 'text-success small fw-semibold';
+    // ── Modal de envío ───────────────────────────────────────────
+    function prepararModal() {
+        const totalResp = respondidas.filter(Boolean).length;
+        const falta = TOTAL_PREGS - totalResp;
+        document.getElementById('modalMensaje').textContent =
+            'Has respondido ' + totalResp + ' de ' + TOTAL_PREGS + ' preguntas.';
+        if (falta > 0) {
+            document.getElementById('modalAdvertencia').classList.remove('d-none');
+            document.getElementById('modalAdvertenciaTexto').textContent =
+                falta + ' pregunta(s) sin responder contarán como incorrectas.';
+        } else {
+            document.getElementById('modalAdvertencia').classList.add('d-none');
         }
     }
 
-    function validarExamen() {
-        if (respondidas < totalPreguntas) {
-            const falta = totalPreguntas - respondidas;
-            // Si el usuario cancela, no se establece examEnviado y beforeunload sigue activo
-            return confirm(
-                `Faltan ${falta} pregunta(s) sin responder. ` +
-                `Las preguntas sin respuesta se contarán como incorrectas.\n¿Deseas enviar de todos modos?`
-            );
-        }
-        return true;
+    function enviarExamen() {
+        examEnviado = true;
+        clearInterval(crono);
+        document.getElementById('formExamen').submit();
     }
 
-    // Advertencia al salir: se muestra solo si el examen aún no fue enviado.
-    // Nota: removeEventListener con función anónima no funciona (referencia distinta),
-    // por eso se usa la bandera 'examEnviado' para suprimir el diálogo tras el submit.
+    // ── Temporizador regresivo ───────────────────────────────────
+    let segundos       = @segRestantes;
+    const ALERTA_SEG   = 15 * 60;
+    let alertaMostrada = false;
+
+    function formatTiempo(s) {
+        return String(Math.floor(s / 60)).padStart(2,'0') + ':' +
+               String(s % 60).padStart(2,'0');
+    }
+
+    document.getElementById('cronometro').textContent = formatTiempo(segundos);
+
+    const crono = setInterval(() => {
+        if (segundos <= 0) {
+            clearInterval(crono);
+            examEnviado = true;
+            document.getElementById('formExamen').submit();
+            return;
+        }
+        segundos--;
+        document.getElementById('cronometro').textContent = formatTiempo(segundos);
+
+        // Alerta a 15 minutos restantes
+        if (segundos === ALERTA_SEG && !alertaMostrada) {
+            alertaMostrada = true;
+            new bootstrap.Modal(document.getElementById('modalAlerta15')).show();
+        }
+
+        // Cambiar color del temporizador
+        const box = document.getElementById('timerBox');
+        if (segundos <= 300) { // últimos 5 min → rojo
+            box.className = 'badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6';
+        } else if (segundos <= ALERTA_SEG) { // últimos 15 min → amarillo
+            box.className = 'badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fs-6';
+        }
+    }, 1000);
+
+    // Advertencia al cerrar pestaña/navegar fuera
     window.addEventListener('beforeunload', function (e) {
-        if (!examEnviado) {
-            e.preventDefault();
-            e.returnValue = '';
-        }
+        if (!examEnviado) { e.preventDefault(); e.returnValue = ''; }
     });
-    document.getElementById('formExamen').addEventListener('submit', function () {
-        examEnviado = true;   // Suprimir beforeunload al confirmar envío
-        clearInterval(crono); // Detener cronómetro
-    });
+
+    // Inicializar
+    actualizarUI();
 </script>
 }

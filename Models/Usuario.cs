@@ -58,6 +58,20 @@ namespace SimulacroExamen.Models
         /// </summary>
         public bool Activo { get; set; } = true;
 
+        /// <summary>
+        /// Nota ponderada del usuario en escala vigesimal (0–20).
+        /// La define el propio usuario en su página de Configuración.
+        /// Se usa para calcular la nota final: NotaFinal = PuntajeVigesimal * 0.70 + NotaPonderada * 0.30.
+        /// Null si el usuario no la ha configurado.
+        /// </summary>
+        public double? NotaPonderada { get; set; }
+
+        /// <summary>
+        /// Intentos de examen extra otorgados por un administrador.
+        /// El límite diario efectivo = 5 + IntentosExtra.
+        /// </summary>
+        public int IntentosExtra { get; set; } = 0;
+
         // ── Propiedades de navegación EF Core ───────────────────────
         /// <summary>Lista de todos los exámenes que ha realizado este usuario.</summary>
         public ICollection<Examen> Examenes { get; set; } = new List<Examen>();

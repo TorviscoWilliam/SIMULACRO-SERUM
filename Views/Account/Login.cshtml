@@ -82,8 +82,14 @@
                     </form>
                 </div>
 
-                <div class="card-footer text-center text-muted small py-3 bg-transparent">
-                    &copy; @DateTime.Now.Year Simulacro SERUM
+                <div class="card-footer text-center py-3 bg-transparent">
+                    @if (TempData["Exito"] != null)
+                    {
+                        <div class="alert alert-success py-1 small mb-2">@TempData["Exito"]</div>
+                    }
+                    <span class="text-muted small">¿No tienes cuenta?</span>
+                    <a asp-action="Register" class="fw-semibold ms-1">Regístrate aquí</a>
+                    <div class="text-muted small mt-2">&copy; @DateTime.Now.Year Simulacro SERUM</div>
                 </div>
             </div>
 

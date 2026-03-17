@@ -1,0 +1,58 @@
+@model SimulacroExamen.ViewModels.CrearNoticiaViewModel
+@{
+    ViewData["Title"] = "Nueva Noticia";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+
+        <h2 class="fw-bold mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Nueva Noticia</h2>
+        <p class="text-muted mb-4">Publica un anuncio visible para todos los estudiantes.</p>
+
+        <form asp-action="CrearNoticia" method="post" enctype="multipart/form-data">
+            @Html.AntiForgeryToken()
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+
+                    <div class="mb-3">
+                        <label asp-for="Titulo" class="form-label fw-semibold"></label>
+                        <input asp-for="Titulo" class="form-control" placeholder="Título de la noticia" />
+                        <span asp-validation-for="Titulo" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Contenido" class="form-label fw-semibold"></label>
+                        <textarea asp-for="Contenido" class="form-control" rows="6"
+                                  placeholder="Escribe el contenido del anuncio..."></textarea>
+                        <span asp-validation-for="Contenido" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-0">
+                        <label asp-for="Imagen" class="form-label fw-semibold"></label>
+                        <input asp-for="Imagen" type="file" class="form-control"
+                               accept=".jpg,.jpeg,.png,.gif,.webp" />
+                        <div class="form-text">Opcional · Formatos: JPG, PNG, GIF, WEBP · Máx. 5 MB</div>
+                        <span asp-validation-for="Imagen" class="text-danger small"></span>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="d-flex gap-3 mt-4">
+                <button type="submit" class="btn btn-primary btn-lg flex-fill">
+                    <i class="bi bi-send me-2"></i>Publicar noticia
+                </button>
+                <a asp-action="Noticias" class="btn btn-outline-secondary btn-lg">
+                    <i class="bi bi-arrow-left me-2"></i>Cancelar
+                </a>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.21.0/jquery.validate.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validation-unobtrusive/4.0.0/jquery.validate.unobtrusive.min.js"></script>
+}

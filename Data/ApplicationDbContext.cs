@@ -15,6 +15,7 @@ namespace SimulacroExamen.Data
         public DbSet<Alternativa>       Alternativas       { get; set; }
         public DbSet<Examen>            Examenes           { get; set; }
         public DbSet<PreguntaExamen>    PreguntasExamen    { get; set; }
+        public DbSet<Noticia>           Noticias           { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -96,6 +97,16 @@ namespace SimulacroExamen.Data
 
                 e.Property(ex => ex.FechaInicio).HasDefaultValueSql("GETDATE()");
                 e.Ignore(ex => ex.Porcentaje);
+            });
+
+            // ── Noticias ──────────────────────────────────────────────
+            modelBuilder.Entity<Noticia>(e =>
+            {
+                e.Property(n => n.FechaPublicacion).HasDefaultValueSql("GETDATE()");
+                e.HasOne(n => n.Admin)
+                 .WithMany()
+                 .HasForeignKey(n => n.AdminId)
+                 .OnDelete(DeleteBehavior.Restrict);
             });
 
             // ── PreguntasExamen ───────────────────────────────────────

@@ -62,6 +62,17 @@ namespace SimulacroExamen.Controllers
                 .ToDictionary(x => x.TipoId!.Value, x => x.Cantidad);
             ViewBag.TiposAcceso      = tiposAcceso;
 
+            var hoy = DateTime.Today;
+            var intentosHoy = await _db.Examenes
+                .CountAsync(e => e.UsuarioId == uid && e.FechaInicio >= hoy);
+            var limiteExtra = await _db.Usuarios
+                .Where(u => u.Id == uid)
+                .Select(u => u.IntentosExtra)
+                .FirstOrDefaultAsync();
+            ViewBag.IntentosHoy       = intentosHoy;
+            ViewBag.IntentosRestantes = Math.Max(0, 5 + limiteExtra - intentosHoy);
+            ViewBag.LimiteDiario      = 5 + limiteExtra;
+
             return View();
         }
 
@@ -79,6 +90,22 @@ namespace SimulacroExamen.Controllers
             if (!tieneAcceso)
             {
                 TempData["Error"] = "No tienes acceso a ese tipo de examen.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Límite de 5 exámenes por día (+ intentos extra asignados por admin)
+            var hoy = DateTime.Today;
+            var intentosHoy = await _db.Examenes
+                .CountAsync(e => e.UsuarioId == uid && e.FechaInicio >= hoy);
+
+            var intentosExtra = await _db.Usuarios
+                .Where(u => u.Id == uid)
+                .Select(u => u.IntentosExtra)
+                .FirstOrDefaultAsync();
+
+            if (intentosHoy >= 5 + intentosExtra)
+            {
+                TempData["Error"] = $"Has alcanzado el límite de {5 + intentosExtra} exámenes diarios. Vuelve mañana.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -149,6 +176,12 @@ namespace SimulacroExamen.Controllers
 
             if (examen == null)
                 return RedirectToAction(nameof(Index));
+
+            // Calcular segundos restantes (1 hora desde el inicio)
+            const int duracionSegundos = 3600;
+            var transcurridos = (int)(DateTime.Now - examen.FechaInicio).TotalSeconds;
+            var restantes = Math.Max(0, duracionSegundos - transcurridos);
+            ViewBag.SegundosRestantes = restantes;
 
             var vm = new ExamenViewModel
             {
@@ -244,15 +277,27 @@ namespace SimulacroExamen.Controllers
             if (examen == null)
                 return RedirectToAction(nameof(Historial));
 
+            var notaPonderada = await _db.Usuarios
+                .Where(u => u.Id == UsuarioId)
+                .Select(u => u.NotaPonderada)
+                .FirstOrDefaultAsync();
+
+            double? notaFinal = notaPonderada.HasValue
+                ? Math.Round(examen.PuntajeVigesimal * 0.70 + notaPonderada.Value * 0.30, 2)
+                : null;
+
             var vm = new ResultadoExamenViewModel
             {
                 ExamenId         = examen.Id,
                 Puntaje          = examen.Puntaje,
+                PuntajeVigesimal = examen.PuntajeVigesimal,
                 TotalPreguntas   = examen.TotalPreguntas,
                 Porcentaje       = examen.Porcentaje,
                 FechaInicio      = examen.FechaInicio,
                 FechaFin         = examen.FechaFin!.Value,
-                TipoExamenNombre = examen.TipoExamen?.Nombre ?? ""
+                TipoExamenNombre = examen.TipoExamen?.Nombre ?? "",
+                NotaPonderada    = notaPonderada,
+                NotaFinal        = notaFinal
             };
 
             int num = 1;
@@ -270,6 +315,77 @@ namespace SimulacroExamen.Controllers
             }
 
             return View(vm);
+        }
+
+        // ── GET /Examen/Configuracion ─────────────────────────────────
+        public async Task<IActionResult> Configuracion()
+        {
+            var usuario = await _db.Usuarios.FindAsync(UsuarioId);
+            if (usuario == null) return RedirectToAction(nameof(Index));
+
+            var vm = new ConfiguracionViewModel
+            {
+                NotaPonderada = usuario.NotaPonderada
+            };
+            return View(vm);
+        }
+
+        // ── POST /Examen/Configuracion ────────────────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Configuracion(ConfiguracionViewModel vm)
+        {
+            var usuario = await _db.Usuarios.FindAsync(UsuarioId);
+            if (usuario == null) return RedirectToAction(nameof(Index));
+
+            bool cambioContrasena = !string.IsNullOrWhiteSpace(vm.ContrasenaNueva);
+
+            if (cambioContrasena)
+            {
+                if (string.IsNullOrWhiteSpace(vm.ContrasenaActual) ||
+                    !BCrypt.Net.BCrypt.Verify(vm.ContrasenaActual, usuario.Contrasena))
+                {
+                    ModelState.AddModelError("ContrasenaActual", "La contraseña actual es incorrecta.");
+                    return View(vm);
+                }
+
+                if (!ModelState.IsValid)
+                    return View(vm);
+
+                usuario.Contrasena = BCrypt.Net.BCrypt.HashPassword(vm.ContrasenaNueva!);
+            }
+
+            // Guardar nota ponderada (puede actualizarse independientemente)
+            usuario.NotaPonderada = vm.NotaPonderada;
+
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = cambioContrasena
+                ? "Contraseña y nota ponderada actualizadas correctamente."
+                : "Nota ponderada actualizada correctamente.";
+
+            return RedirectToAction(nameof(Configuracion));
+        }
+
+        // ── GET /Examen/Noticias ──────────────────────────────────────
+        public async Task<IActionResult> Noticias()
+        {
+            var noticias = await _db.Noticias
+                .Include(n => n.Admin)
+                .Where(n => n.Activo)
+                .OrderByDescending(n => n.FechaPublicacion)
+                .Select(n => new NoticiaListaVM
+                {
+                    Id               = n.Id,
+                    Titulo           = n.Titulo,
+                    Contenido        = n.Contenido,
+                    ImagenRuta       = n.ImagenRuta,
+                    FechaPublicacion = n.FechaPublicacion,
+                    AdminNombre      = n.Admin != null ? n.Admin.NombreUsuario : "",
+                    Activo           = n.Activo
+                })
+                .ToListAsync();
+
+            return View(noticias);
         }
 
         // ── GET /Examen/Historial ─────────────────────────────────────
