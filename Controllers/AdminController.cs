@@ -623,6 +623,77 @@ namespace SimulacroExamen.Controllers
                 "Plantilla_Preguntas.xlsx");
         }
 
+        // GET /Admin/ExportarPreguntas?tipoId=
+        public async Task<IActionResult> ExportarPreguntas(int? tipoId)
+        {
+            var query = _db.Preguntas
+                .Where(p => p.Activo)
+                .Include(p => p.TipoExamen)
+                .Include(p => p.Alternativas)
+                .AsQueryable();
+
+            if (tipoId.HasValue)
+                query = query.Where(p => p.TipoExamenId == tipoId.Value);
+
+            var preguntas = await query.OrderBy(p => p.TipoExamen!.Nombre).ThenBy(p => p.Id).ToListAsync();
+
+            var bytes = _excel.ExportarPreguntas(preguntas);
+            var tipo  = tipoId.HasValue
+                ? (await _db.TiposExamen.FindAsync(tipoId.Value))?.Nombre ?? "Tipo"
+                : "Todos";
+
+            return File(bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"Preguntas_{tipo}_{DateTime.Now:yyyyMMdd}.xlsx");
+        }
+
+        // POST /Admin/EliminarPreguntasEnMasa
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EliminarPreguntasEnMasa([FromForm] int[] ids)
+        {
+            if (ids == null || ids.Length == 0)
+            {
+                TempData["Error"] = "No se seleccionaron preguntas.";
+                return RedirectToAction(nameof(Preguntas));
+            }
+
+            var preguntas = await _db.Preguntas
+                .Where(p => ids.Contains(p.Id) && p.Activo)
+                .ToListAsync();
+
+            foreach (var p in preguntas)
+                p.Activo = false;
+
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = $"{preguntas.Count} pregunta(s) eliminada(s).";
+            return RedirectToAction(nameof(Preguntas));
+        }
+
+        // POST /Admin/AsignarTipoEnMasa
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AsignarTipoEnMasa([FromForm] int[] ids, [FromForm] int nuevoTipoId)
+        {
+            if (ids == null || ids.Length == 0)
+            {
+                TempData["Error"] = "No se seleccionaron preguntas.";
+                return RedirectToAction(nameof(Preguntas));
+            }
+
+            var preguntas = await _db.Preguntas
+                .Where(p => ids.Contains(p.Id) && p.Activo)
+                .ToListAsync();
+
+            int? tipoDestino = nuevoTipoId > 0 ? nuevoTipoId : null;
+            foreach (var p in preguntas)
+                p.TipoExamenId = tipoDestino;
+
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = $"{preguntas.Count} pregunta(s) reasignada(s).";
+            return RedirectToAction(nameof(Preguntas));
+        }
+
         // ═══════════════════════════════════════════════════════════
         //  TIPOS DE EXAMEN
         // ═══════════════════════════════════════════════════════════

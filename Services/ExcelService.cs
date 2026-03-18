@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using SimulacroExamen.Models;
 using SimulacroExamen.ViewModels;
 
 namespace SimulacroExamen.Services
@@ -212,6 +213,62 @@ namespace SimulacroExamen.Services
             ws.Columns(1, 1).Width  = 10;
             ws.Columns(3, 6).Width  = 20;
             ws.Column(7).Width = 18;
+            ws.SheetView.FreezeRows(1);
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
+        }
+    }
+
+        // ── Exportar preguntas a Excel ───────────────────────────────
+        public byte[] ExportarPreguntas(List<Pregunta> preguntas)
+        {
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("Preguntas");
+
+            string[] headers = {
+                "ID", "Tipo de Examen", "Pregunta",
+                "Resp. Correcta", "Opción 2", "Opción 3", "Opción 4",
+                "Fecha Creación"
+            };
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var cell = ws.Cell(1, i + 1);
+                cell.Value = headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#1a6b3a");
+                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
+            for (int i = 0; i < preguntas.Count; i++)
+            {
+                int row = i + 2;
+                var p = preguntas[i];
+                var correcta = p.Alternativas.FirstOrDefault(a => a.EsCorrecta);
+                var incorrectas = p.Alternativas.Where(a => !a.EsCorrecta).ToList();
+
+                ws.Cell(row, 1).Value = p.Id;
+                ws.Cell(row, 2).Value = p.TipoExamen?.Nombre ?? "Sin tipo";
+                ws.Cell(row, 3).Value = p.TextoPregunta;
+                ws.Cell(row, 4).Value = correcta?.TextoAlternativa ?? "";
+                ws.Cell(row, 5).Value = incorrectas.ElementAtOrDefault(0)?.TextoAlternativa ?? "";
+                ws.Cell(row, 6).Value = incorrectas.ElementAtOrDefault(1)?.TextoAlternativa ?? "";
+                ws.Cell(row, 7).Value = incorrectas.ElementAtOrDefault(2)?.TextoAlternativa ?? "";
+                ws.Cell(row, 8).Value = p.FechaCreacion.ToString("dd/MM/yyyy HH:mm");
+
+                if (i % 2 == 1)
+                    ws.Row(row).Cells(1, headers.Length)
+                      .Style.Fill.BackgroundColor = XLColor.FromHtml("#ecf0f1");
+            }
+
+            ws.Column(3).Width = 55;
+            ws.Column(4).Width = 30;
+            ws.Columns(5, 7).Width = 25;
+            ws.Columns(1, 2).AdjustToContents();
+            ws.Column(8).AdjustToContents();
             ws.SheetView.FreezeRows(1);
 
             using var ms = new MemoryStream();

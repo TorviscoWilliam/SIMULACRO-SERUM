@@ -19,5 +19,10 @@ namespace SimulacroExamen.Services
         /// Genera el archivo de plantilla Excel para importar preguntas.
         /// </summary>
         byte[] GenerarPlantillaPreguntas();
+
+        /// <summary>
+        /// Genera un Excel con el listado de preguntas (con alternativas y tipo de examen).
+        /// </summary>
+        byte[] ExportarPreguntas(List<SimulacroExamen.Models.Pregunta> preguntas);
     }
 }

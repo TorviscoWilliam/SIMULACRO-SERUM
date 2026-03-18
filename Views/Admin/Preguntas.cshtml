@@ -14,6 +14,9 @@
         <p class="text-muted mb-0">@totalItems pregunta(s) activa(s)</p>
     </div>
     <div class="d-flex gap-2">
+        <a asp-action="ExportarPreguntas" asp-route-tipoId="@tipoId" class="btn btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-2"></i>Exportar Excel
+        </a>
         <a asp-action="DescargarPlantilla" class="btn btn-outline-secondary">
             <i class="bi bi-download me-2"></i>Plantilla Excel
         </a>
@@ -65,39 +68,84 @@
     </div>
 </div>
 
+<!-- Barra de selección masiva (se muestra al seleccionar al menos 1) -->
+<div id="barraAcciones" class="card border-0 shadow-sm mb-3 d-none">
+    <div class="card-body py-2 d-flex align-items-center gap-3 flex-wrap">
+        <span class="fw-semibold text-primary">
+            <i class="bi bi-check2-square me-1"></i>
+            <span id="contadorSeleccion">0</span> seleccionada(s)
+        </span>
+        <div class="d-flex gap-2 ms-auto flex-wrap">
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmarEliminarMasa()">
+                <i class="bi bi-trash me-1"></i>Eliminar selección
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalAsignarTipo">
+                <i class="bi bi-arrow-left-right me-1"></i>Asignar a otro examen
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deseleccionarTodo()">
+                <i class="bi bi-x me-1"></i>Deseleccionar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Formulario oculto para acciones masivas -->
+<form id="formMasa" method="post" style="display:none">
+    @Html.AntiForgeryToken()
+    <div id="hiddenIds"></div>
+    <input type="hidden" name="nuevoTipoId" id="hiddenNuevoTipoId" value="0"/>
+</form>
+
+<!-- Checkbox "seleccionar todos" -->
+@if (Model.Any())
+{
+    <div class="d-flex align-items-center gap-2 mb-2 px-1">
+        <input type="checkbox" id="selectAll" class="form-check-input mt-0" style="cursor:pointer">
+        <label for="selectAll" class="text-muted small" style="cursor:pointer">Seleccionar todos en esta página</label>
+    </div>
+}
+
 <!-- Lista de preguntas -->
 <div class="accordion" id="accordionPreguntas">
     @for (int i = 0; i < Model.Count; i++)
     {
         var p = Model[i];
-        <div class="accordion-item border-0 shadow-sm mb-2 pregunta-item" data-texto="@p.TextoPregunta.ToLower()">
+        <div class="accordion-item border-0 shadow-sm mb-2 pregunta-item" data-texto="@p.TextoPregunta.ToLower()" data-id="@p.Id">
             <h2 class="accordion-header">
-                <button class="accordion-button collapsed rounded" type="button"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#preg_@p.Id">
-                    <div class="d-flex align-items-center gap-3 w-100">
-                        <span class="badge bg-success rounded-pill px-3">@(i + 1)</span>
-                        @if (p.TipoExamen != null)
-                        {
-                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle small text-nowrap">
-                                @p.TipoExamen.Nombre
-                            </span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary-subtle text-secondary border small text-nowrap">Sin tipo</span>
-                        }
-                        <span class="flex-grow-1 text-truncate" style="max-width:55%">
-                            @p.TextoPregunta
-                        </span>
-                        <span class="badge bg-light text-dark border ms-auto me-3 small">
-                            @p.Alternativas.Count alternativas
-                        </span>
-                        <span class="text-muted small me-2">
-                            @p.FechaCreacion.ToString("dd/MM/yy")
-                        </span>
+                <div class="d-flex align-items-center">
+                    <!-- Checkbox de selección -->
+                    <div class="ps-3 pe-2 d-flex align-items-center" style="min-width:40px">
+                        <input type="checkbox" class="form-check-input pregunta-check mt-0"
+                               data-id="@p.Id" style="cursor:pointer"
+                               onclick="event.stopPropagation()">
                     </div>
-                </button>
+                    <button class="accordion-button collapsed rounded flex-grow-1" type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#preg_@p.Id">
+                        <div class="d-flex align-items-center gap-3 w-100">
+                            <span class="badge bg-success rounded-pill px-3">@(i + 1)</span>
+                            @if (p.TipoExamen != null)
+                            {
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small text-nowrap">
+                                    @p.TipoExamen.Nombre
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary-subtle text-secondary border small text-nowrap">Sin tipo</span>
+                            }
+                            <span class="flex-grow-1 text-truncate" style="max-width:55%">
+                                @p.TextoPregunta
+                            </span>
+                            <span class="badge bg-light text-dark border ms-auto me-3 small">
+                                @p.Alternativas.Count alternativas
+                            </span>
+                            <span class="text-muted small me-2">
+                                @p.FechaCreacion.ToString("dd/MM/yy")
+                            </span>
+                        </div>
+                    </button>
+                </div>
             </h2>
             <div id="preg_@p.Id" class="accordion-collapse collapse">
                 <div class="accordion-body">
@@ -230,13 +278,107 @@
     </div>
 </div>
 
+<!-- Modal Asignar Tipo de Examen en Masa -->
+<div class="modal fade" id="modalAsignarTipo" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-arrow-left-right me-2"></i>Asignar a otro Examen
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Las preguntas seleccionadas serán reasignadas al tipo de examen elegido.</p>
+                <label class="form-label fw-semibold">Tipo de Examen destino</label>
+                <select id="selectNuevoTipo" class="form-select">
+                    <option value="0">— Sin tipo (desvincular) —</option>
+                    @foreach (var t in tipos)
+                    {
+                        <option value="@t.Id">@t.Nombre</option>
+                    }
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmarAsignarTipo()">
+                    <i class="bi bi-check2 me-1"></i>Reasignar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
+    // ── Búsqueda local ────────────────────────────────────────────
     document.getElementById('busqueda').addEventListener('input', function () {
         const q = this.value.toLowerCase();
         document.querySelectorAll('.pregunta-item').forEach(function (item) {
             item.style.display = item.dataset.texto.includes(q) ? '' : 'none';
         });
     });
+
+    // ── Selección masiva ──────────────────────────────────────────
+    function actualizarBarra() {
+        const checks  = document.querySelectorAll('.pregunta-check:checked');
+        const barra   = document.getElementById('barraAcciones');
+        const contador = document.getElementById('contadorSeleccion');
+        contador.textContent = checks.length;
+        barra.classList.toggle('d-none', checks.length === 0);
+    }
+
+    document.querySelectorAll('.pregunta-check').forEach(function (chk) {
+        chk.addEventListener('change', actualizarBarra);
+    });
+
+    document.getElementById('selectAll')?.addEventListener('change', function () {
+        const visible = document.querySelectorAll('.pregunta-item:not([style*="display: none"]) .pregunta-check');
+        visible.forEach(c => c.checked = this.checked);
+        actualizarBarra();
+    });
+
+    function deseleccionarTodo() {
+        document.querySelectorAll('.pregunta-check').forEach(c => c.checked = false);
+        const sa = document.getElementById('selectAll');
+        if (sa) sa.checked = false;
+        actualizarBarra();
+    }
+
+    function idsSeleccionados() {
+        return Array.from(document.querySelectorAll('.pregunta-check:checked'))
+                    .map(c => c.dataset.id);
+    }
+
+    function rellenarFormMasa(action, ids) {
+        const form = document.getElementById('formMasa');
+        form.action = action;
+        const cont = document.getElementById('hiddenIds');
+        cont.innerHTML = '';
+        ids.forEach(function (id) {
+            const inp = document.createElement('input');
+            inp.type  = 'hidden';
+            inp.name  = 'ids';
+            inp.value = id;
+            cont.appendChild(inp);
+        });
+    }
+
+    function confirmarEliminarMasa() {
+        const ids = idsSeleccionados();
+        if (ids.length === 0) return;
+        if (!confirm('¿Eliminar ' + ids.length + ' pregunta(s) seleccionada(s)? Esta acción no se puede deshacer.')) return;
+        rellenarFormMasa('@Url.Action("EliminarPreguntasEnMasa", "Admin")', ids);
+        document.getElementById('formMasa').submit();
+    }
+
+    function confirmarAsignarTipo() {
+        const ids  = idsSeleccionados();
+        const tipo = document.getElementById('selectNuevoTipo').value;
+        if (ids.length === 0) return;
+        rellenarFormMasa('@Url.Action("AsignarTipoEnMasa", "Admin")', ids);
+        document.getElementById('hiddenNuevoTipoId').value = tipo;
+        document.getElementById('formMasa').submit();
+    }
 </script>
 }
