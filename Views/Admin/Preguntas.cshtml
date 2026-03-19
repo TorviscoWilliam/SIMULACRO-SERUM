@@ -4,6 +4,7 @@
     var tipos      = (List<SimulacroExamen.Models.TipoExamen>)ViewBag.Tipos;
     var tipoId     = (int?)ViewBag.TipoId;
     int page       = (int)ViewBag.Page;
+    int pageSize   = (int)ViewBag.PageSize;
     int totalPages = (int)ViewBag.TotalPages;
     int totalItems = (int)ViewBag.TotalItems;
 }
@@ -49,20 +50,33 @@
                             }
                         }
                     </select>
+                    <input type="hidden" name="pageSize" value="@pageSize" />
                     <button type="submit" class="btn btn-outline-primary text-nowrap">
                         <i class="bi bi-funnel me-1"></i>Filtrar
                     </button>
                     @if (tipoId.HasValue)
                     {
-                        <a asp-action="Preguntas" class="btn btn-outline-secondary text-nowrap">
+                        <a asp-action="Preguntas" asp-route-pageSize="@pageSize" class="btn btn-outline-secondary text-nowrap">
                             <i class="bi bi-x me-1"></i>Limpiar
                         </a>
                     }
                 </form>
             </div>
-            <div class="col-md-7">
+            <div class="col-md-4">
                 <input type="text" id="busqueda" class="form-control"
                        placeholder="Buscar pregunta...">
+            </div>
+            <div class="col-md-3">
+                <div class="d-flex align-items-center gap-2">
+                    <label class="text-muted small text-nowrap mb-0">Mostrar:</label>
+                    <div class="btn-group btn-group-sm" role="group">
+                        @foreach (var size in new[] { 10, 25, 100 })
+                        {
+                            <a href="@Url.Action("Preguntas", "Admin", new { tipoId = tipoId, page = 1, pageSize = size })"
+                               class="btn @(pageSize == size ? "btn-success" : "btn-outline-secondary")">@size</a>
+                        }
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -112,35 +126,36 @@
         var p = Model[i];
         <div class="accordion-item border-0 shadow-sm mb-2 pregunta-item" data-texto="@p.TextoPregunta.ToLower()" data-id="@p.Id">
             <h2 class="accordion-header">
-                <div class="d-flex align-items-center">
+                <div class="d-flex align-items-stretch">
                     <!-- Checkbox de selección -->
-                    <div class="ps-3 pe-2 d-flex align-items-center" style="min-width:40px">
+                    <div class="ps-3 pe-2 d-flex align-items-center flex-shrink-0" style="min-width:44px">
                         <input type="checkbox" class="form-check-input pregunta-check mt-0"
                                data-id="@p.Id" style="cursor:pointer"
                                onclick="event.stopPropagation()">
                     </div>
-                    <button class="accordion-button collapsed rounded flex-grow-1" type="button"
+                    <button class="accordion-button collapsed flex-grow-1 py-3" type="button"
                             data-bs-toggle="collapse"
-                            data-bs-target="#preg_@p.Id">
-                        <div class="d-flex align-items-center gap-3 w-100">
-                            <span class="badge bg-success rounded-pill px-3">@(i + 1)</span>
+                            data-bs-target="#preg_@p.Id"
+                            style="min-width:0">
+                        <div class="d-flex align-items-center gap-2 w-100" style="min-width:0; padding-right:0.5rem">
+                            <span class="badge bg-success rounded-pill flex-shrink-0" style="min-width:2rem">@((page - 1) * pageSize + i + 1)</span>
                             @if (p.TipoExamen != null)
                             {
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small text-nowrap">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small text-nowrap flex-shrink-0">
                                     @p.TipoExamen.Nombre
                                 </span>
                             }
                             else
                             {
-                                <span class="badge bg-secondary-subtle text-secondary border small text-nowrap">Sin tipo</span>
+                                <span class="badge bg-secondary-subtle text-secondary border small text-nowrap flex-shrink-0">Sin tipo</span>
                             }
-                            <span class="flex-grow-1 text-truncate" style="max-width:55%">
+                            <span class="flex-grow-1 text-truncate small" style="min-width:0">
                                 @p.TextoPregunta
                             </span>
-                            <span class="badge bg-light text-dark border ms-auto me-3 small">
+                            <span class="badge bg-light text-dark border small flex-shrink-0 ms-2">
                                 @p.Alternativas.Count alternativas
                             </span>
-                            <span class="text-muted small me-2">
+                            <span class="text-muted small flex-shrink-0 ms-2">
                                 @p.FechaCreacion.ToString("dd/MM/yy")
                             </span>
                         </div>
@@ -210,7 +225,7 @@
         <ul class="pagination justify-content-center">
             <li class="page-item @(page <= 1 ? "disabled" : "")">
                 <a class="page-link" asp-action="Preguntas"
-                   asp-route-page="@(page - 1)" asp-route-tipoId="@tipoId">
+                   asp-route-page="@(page - 1)" asp-route-tipoId="@tipoId" asp-route-pageSize="@pageSize">
                     <i class="bi bi-chevron-left"></i>
                 </a>
             </li>
@@ -218,12 +233,12 @@
             {
                 <li class="page-item @(i == page ? "active" : "")">
                     <a class="page-link" asp-action="Preguntas"
-                       asp-route-page="@i" asp-route-tipoId="@tipoId">@i</a>
+                       asp-route-page="@i" asp-route-tipoId="@tipoId" asp-route-pageSize="@pageSize">@i</a>
                 </li>
             }
             <li class="page-item @(page >= totalPages ? "disabled" : "")">
                 <a class="page-link" asp-action="Preguntas"
-                   asp-route-page="@(page + 1)" asp-route-tipoId="@tipoId">
+                   asp-route-page="@(page + 1)" asp-route-tipoId="@tipoId" asp-route-pageSize="@pageSize">
                     <i class="bi bi-chevron-right"></i>
                 </a>
             </li>

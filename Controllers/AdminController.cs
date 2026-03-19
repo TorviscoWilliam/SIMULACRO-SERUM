@@ -358,10 +358,11 @@ namespace SimulacroExamen.Controllers
         //  PREGUNTAS
         // ═══════════════════════════════════════════════════════════
 
-        // GET /Admin/Preguntas?tipoId=&page=
-        public async Task<IActionResult> Preguntas(int? tipoId, int page = 1)
+        // GET /Admin/Preguntas?tipoId=&page=&pageSize=
+        public async Task<IActionResult> Preguntas(int? tipoId, int page = 1, int pageSize = 20)
         {
-            const int pageSize = 20;
+            if (pageSize != 10 && pageSize != 25 && pageSize != 100)
+                pageSize = 20;
 
             var tipos = await _db.TiposExamen.Where(t => t.Activo).OrderBy(t => t.Nombre).ToListAsync();
             ViewBag.Tipos  = tipos;
