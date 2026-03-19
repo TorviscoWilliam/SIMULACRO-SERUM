@@ -170,8 +170,10 @@ namespace SimulacroExamen.Controllers
                     TiposAsignados = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList(),
                     IntentosExtra  = u.IntentosExtra,
                     NombreCompleto = (u.PrimerNombre != null || u.PrimerApellido != null)
-                        ? string.Join(" ", new[] { u.PrimerNombre, u.SegundoNombre, u.PrimerApellido, u.SegundoApellido }
-                            .Where(s => s != null))
+                        ? ((u.PrimerNombre ?? "") +
+                           (u.SegundoNombre  != null ? " " + u.SegundoNombre  : "") +
+                           (u.PrimerApellido != null ? " " + u.PrimerApellido : "") +
+                           (u.SegundoApellido != null ? " " + u.SegundoApellido : "")).Trim()
                         : null,
                     Celular = u.Celular,
                     Dni     = u.Dni
