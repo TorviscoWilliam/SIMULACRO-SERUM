@@ -47,6 +47,15 @@ namespace SimulacroExamen.ViewModels
         /// <summary>Intentos de examen extra otorgados por un admin (límite diario = 5 + IntentosExtra).</summary>
         public int IntentosExtra { get; set; }
 
+        /// <summary>Nombre completo (PrimerNombre SegundoNombre PrimerApellido SegundoApellido). Null si no se llenó al registrarse.</summary>
+        public string? NombreCompleto { get; set; }
+
+        /// <summary>Celular registrado. Null si no se proporcionó.</summary>
+        public string? Celular { get; set; }
+
+        /// <summary>DNI de 8 dígitos. Null en cuentas creadas antes de este campo.</summary>
+        public string? Dni { get; set; }
+
         // ── Propiedades calculadas (no persistidas en BD) ──────────────
 
         /// <summary>

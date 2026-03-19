@@ -72,6 +72,20 @@ namespace SimulacroExamen.Models
         /// </summary>
         public int IntentosExtra { get; set; } = 0;
 
+        // ── Datos personales ─────────────────────────────────────────
+        [MaxLength(100)] public string? PrimerNombre    { get; set; }
+        [MaxLength(100)] public string? SegundoNombre   { get; set; }
+        [MaxLength(100)] public string? PrimerApellido  { get; set; }
+        [MaxLength(100)] public string? SegundoApellido { get; set; }
+        [MaxLength(20)]  public string? Celular          { get; set; }
+        [MaxLength(8)]   public string? Dni              { get; set; }
+
+        [MaxLength(36)] public string? SessionToken { get; set; }
+
+        public string NombreCompleto =>
+            string.Join(" ", new[] { PrimerNombre, SegundoNombre, PrimerApellido, SegundoApellido }
+                .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+
         // ── Propiedades de navegación EF Core ───────────────────────
         /// <summary>Lista de todos los exámenes que ha realizado este usuario.</summary>
         public ICollection<Examen> Examenes { get; set; } = new List<Examen>();

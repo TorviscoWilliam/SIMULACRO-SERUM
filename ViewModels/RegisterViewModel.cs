@@ -4,6 +4,38 @@ namespace SimulacroExamen.ViewModels
 {
     public class RegisterViewModel
     {
+        // ── Datos personales ─────────────────────────────────────────
+        [Required(ErrorMessage = "El primer nombre es obligatorio")]
+        [MaxLength(100)]
+        [Display(Name = "Primer Nombre")]
+        public string PrimerNombre { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        [Display(Name = "Segundo Nombre")]
+        public string? SegundoNombre { get; set; }
+
+        [Required(ErrorMessage = "El primer apellido es obligatorio")]
+        [MaxLength(100)]
+        [Display(Name = "Primer Apellido")]
+        public string PrimerApellido { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        [Display(Name = "Segundo Apellido")]
+        public string? SegundoApellido { get; set; }
+
+        [Required(ErrorMessage = "El celular es obligatorio")]
+        [MaxLength(20)]
+        [Phone(ErrorMessage = "Formato de celular inválido")]
+        [Display(Name = "Celular")]
+        public string Celular { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "El DNI es obligatorio")]
+        [StringLength(8, MinimumLength = 8, ErrorMessage = "El DNI debe tener exactamente 8 dígitos")]
+        [RegularExpression(@"^\d{8}$", ErrorMessage = "El DNI debe contener solo 8 dígitos numéricos")]
+        [Display(Name = "DNI")]
+        public string Dni { get; set; } = string.Empty;
+
+        // ── Credenciales ─────────────────────────────────────────────
         [Required(ErrorMessage = "El nombre de usuario es obligatorio")]
         [MaxLength(100)]
         [Display(Name = "Nombre de Usuario")]

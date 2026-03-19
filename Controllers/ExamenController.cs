@@ -79,8 +79,11 @@ namespace SimulacroExamen.Controllers
         // ── POST /Examen/IniciarExamen ───────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> IniciarExamen(int tipoExamenId)
+        public async Task<IActionResult> IniciarExamen(int tipoExamenId, int numPreguntas = 20)
         {
+            if (numPreguntas != 20 && numPreguntas != 50 && numPreguntas != 100)
+                numPreguntas = 20;
+
             var uid = UsuarioId;
 
             // Verificar que el usuario tiene acceso a este tipo
@@ -109,10 +112,6 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var tipoExamen = await _db.TiposExamen.FindAsync(tipoExamenId);
-            int numPreguntas = tipoExamen?.NumeroPreguntas
-                               ?? _config.GetValue<int>("AppSettings:NumeroPreguntas", 4);
-
             var preguntas = await _db.Preguntas
                 .Where(p => p.Activo && p.TipoExamenId == tipoExamenId)
                 .Include(p => p.Alternativas)
@@ -124,6 +123,14 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
+            // Duración según cantidad de preguntas elegida
+            int? duracionSegundos = numPreguntas switch
+            {
+                50  => 30 * 60,   // 30 minutos
+                100 => 60 * 60,   // 60 minutos
+                _   => null       // 20 preguntas = sin límite de tiempo
+            };
+
             var rng       = new Random();
             var mezcladas = preguntas.OrderBy(_ => rng.Next())
                                      .Take(Math.Min(numPreguntas, preguntas.Count))
@@ -133,11 +140,12 @@ namespace SimulacroExamen.Controllers
 
             var examen = new Examen
             {
-                UsuarioId      = uid,
-                TipoExamenId   = tipoExamenId,
-                FechaInicio    = DateTime.Now,
-                TotalPreguntas = mezcladas.Count,
-                Completado     = false
+                UsuarioId        = uid,
+                TipoExamenId     = tipoExamenId,
+                FechaInicio      = DateTime.Now,
+                TotalPreguntas   = mezcladas.Count,
+                Completado       = false,
+                DuracionSegundos = duracionSegundos
             };
 
             _db.Examenes.Add(examen);
@@ -177,11 +185,17 @@ namespace SimulacroExamen.Controllers
             if (examen == null)
                 return RedirectToAction(nameof(Index));
 
-            // Calcular segundos restantes (1 hora desde el inicio)
-            const int duracionSegundos = 3600;
-            var transcurridos = (int)(DateTime.Now - examen.FechaInicio).TotalSeconds;
-            var restantes = Math.Max(0, duracionSegundos - transcurridos);
-            ViewBag.SegundosRestantes = restantes;
+            // Calcular segundos restantes según la duración del examen
+            if (examen.DuracionSegundos.HasValue)
+            {
+                var transcurridos = (int)(DateTime.Now - examen.FechaInicio).TotalSeconds;
+                var restantes     = Math.Max(0, examen.DuracionSegundos.Value - transcurridos);
+                ViewBag.SegundosRestantes = restantes;
+            }
+            else
+            {
+                ViewBag.SegundosRestantes = null; // sin límite de tiempo
+            }
 
             var vm = new ExamenViewModel
             {

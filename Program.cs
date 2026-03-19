@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
 using SimulacroExamen.Services;
+using SimulacroExamen.Middleware;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 
@@ -47,6 +48,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
+app.UseMiddleware<SessionValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllerRoute(
@@ -142,6 +144,35 @@ static void MigrarEsquema(ApplicationDbContext context)
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='IntentosExtra')
                ALTER TABLE Usuarios ADD IntentosExtra int NOT NULL DEFAULT 0");
+
+        // Columnas de datos personales en Usuarios
+        foreach (var col in new[] { "PrimerNombre", "SegundoNombre", "PrimerApellido", "SegundoApellido" })
+        {
+            Exec($@"IF NOT EXISTS (
+                       SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                       WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='{col}')
+                   ALTER TABLE Usuarios ADD {col} NVARCHAR(100) NULL");
+        }
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='Celular')
+               ALTER TABLE Usuarios ADD Celular NVARCHAR(20) NULL");
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='Dni')
+               ALTER TABLE Usuarios ADD Dni NVARCHAR(8) NULL");
+
+        // Columna SessionToken para sesión única por usuario
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='SessionToken')
+               ALTER TABLE Usuarios ADD SessionToken NVARCHAR(36) NULL");
+
+        // Columna DuracionSegundos en Examenes
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Examenes' AND COLUMN_NAME='DuracionSegundos')
+               ALTER TABLE Examenes ADD DuracionSegundos int NULL");
 
         // Tabla Noticias
         Exec(@"IF NOT EXISTS (

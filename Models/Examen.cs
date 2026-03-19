@@ -27,6 +27,9 @@ namespace SimulacroExamen.Models
 
         public bool Completado { get; set; } = false;
 
+        /// <summary>Duración máxima en segundos. Null = sin límite de tiempo.</summary>
+        public int? DuracionSegundos { get; set; }
+
         public double Porcentaje => TotalPreguntas > 0
             ? Math.Round((double)Puntaje / TotalPreguntas * 100, 1)
             : 0;

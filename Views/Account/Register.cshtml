@@ -27,7 +27,7 @@
 
 <div class="container">
     <div class="row justify-content-center">
-        <div class="col-md-5 col-lg-4">
+        <div class="col-md-7 col-lg-6">
 
             <div class="card shadow-lg register-card">
                 <div class="card-header py-4 text-center text-white">
@@ -40,30 +40,107 @@
                     <form asp-action="Register" method="post">
                         <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small"></div>
 
+                        <!-- Datos personales -->
+                        <p class="fw-semibold text-muted small mb-2 text-uppercase letter-spacing-1">
+                            <i class="bi bi-person-vcard me-1"></i>Datos Personales
+                        </p>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label asp-for="PrimerNombre" class="form-label fw-semibold small"></label>
+                                <input asp-for="PrimerNombre" id="primerNombre" class="form-control form-control-sm"
+                                       placeholder="Ej: JUAN" autocomplete="given-name" />
+                                <span asp-validation-for="PrimerNombre" class="text-danger small"></span>
+                            </div>
+                            <div class="col-6">
+                                <label asp-for="SegundoNombre" class="form-label fw-semibold small"></label>
+                                <input asp-for="SegundoNombre" class="form-control form-control-sm"
+                                       placeholder="Opcional" autocomplete="additional-name" />
+                                <span asp-validation-for="SegundoNombre" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label asp-for="PrimerApellido" class="form-label fw-semibold small"></label>
+                                <input asp-for="PrimerApellido" id="primerApellido" class="form-control form-control-sm"
+                                       placeholder="Ej: PÉREZ" autocomplete="family-name" />
+                                <span asp-validation-for="PrimerApellido" class="text-danger small"></span>
+                            </div>
+                            <div class="col-6">
+                                <label asp-for="SegundoApellido" class="form-label fw-semibold small"></label>
+                                <input asp-for="SegundoApellido" class="form-control form-control-sm"
+                                       placeholder="Opcional" />
+                                <span asp-validation-for="SegundoApellido" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label asp-for="Celular" class="form-label fw-semibold small">
+                                    Celular <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                    <input asp-for="Celular" class="form-control"
+                                           placeholder="Ej: 987654321" autocomplete="tel" />
+                                    <span class="input-group-text px-2" id="feedCelularIcon"></span>
+                                </div>
+                                <span asp-validation-for="Celular" class="text-danger small"></span>
+                                <div id="feedCelular" class="form-text small d-none"></div>
+                            </div>
+                            <div class="col-6">
+                                <label asp-for="Dni" class="form-label fw-semibold small">
+                                    DNI <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="bi bi-credit-card"></i></span>
+                                    <input asp-for="Dni" class="form-control"
+                                           placeholder="8 dígitos" maxlength="8"
+                                           inputmode="numeric" pattern="\d{8}" />
+                                    <span class="input-group-text px-2" id="feedDniIcon"></span>
+                                </div>
+                                <span asp-validation-for="Dni" class="text-danger small"></span>
+                                <div id="feedDni" class="form-text small d-none"></div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3"/>
+
+                        <!-- Credenciales -->
+                        <p class="fw-semibold text-muted small mb-2 text-uppercase">
+                            <i class="bi bi-lock me-1"></i>Credenciales de Acceso
+                        </p>
+
                         <div class="mb-3">
-                            <label asp-for="NombreUsuario" class="form-label fw-semibold"></label>
-                            <div class="input-group">
+                            <label asp-for="NombreUsuario" class="form-label fw-semibold small"></label>
+                            <div class="input-group input-group-sm">
                                 <span class="input-group-text"><i class="bi bi-person"></i></span>
-                                <input asp-for="NombreUsuario" class="form-control"
-                                       placeholder="Tu nombre de usuario" autocomplete="username"/>
+                                <input asp-for="NombreUsuario" id="nombreUsuario" class="form-control"
+                                       placeholder="Se genera automáticamente" autocomplete="username"/>
+                                <span class="input-group-text px-2" id="feedUsuarioIcon"></span>
                             </div>
                             <span asp-validation-for="NombreUsuario" class="text-danger small"></span>
-                            <div class="form-text small">Se guardará en mayúsculas.</div>
+                            <div id="feedUsuario" class="form-text small">
+                                <i class="bi bi-magic me-1"></i>Se genera como <strong>PrimerNombre.PrimerApellido</strong> — puedes editarlo.
+                            </div>
                         </div>
 
                         <div class="mb-3">
-                            <label asp-for="Correo" class="form-label fw-semibold"></label>
-                            <div class="input-group">
+                            <label asp-for="Correo" class="form-label fw-semibold small"></label>
+                            <div class="input-group input-group-sm">
                                 <span class="input-group-text"><i class="bi bi-envelope"></i></span>
                                 <input asp-for="Correo" class="form-control"
                                        placeholder="correo@ejemplo.com" autocomplete="email"/>
+                                <span class="input-group-text px-2" id="feedCorreoIcon"></span>
                             </div>
                             <span asp-validation-for="Correo" class="text-danger small"></span>
+                            <div id="feedCorreo" class="form-text small d-none"></div>
                         </div>
 
                         <div class="mb-3">
-                            <label asp-for="Contrasena" class="form-label fw-semibold"></label>
-                            <div class="input-group">
+                            <label asp-for="Contrasena" class="form-label fw-semibold small"></label>
+                            <div class="input-group input-group-sm">
                                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
                                 <input asp-for="Contrasena" class="form-control"
                                        placeholder="Mínimo 6 caracteres" autocomplete="new-password"/>
@@ -75,8 +152,8 @@
                         </div>
 
                         <div class="mb-4">
-                            <label asp-for="ConfirmarContrasena" class="form-label fw-semibold"></label>
-                            <div class="input-group">
+                            <label asp-for="ConfirmarContrasena" class="form-label fw-semibold small"></label>
+                            <div class="input-group input-group-sm">
                                 <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
                                 <input asp-for="ConfirmarContrasena" class="form-control"
                                        placeholder="Repita la contraseña" autocomplete="new-password"/>
@@ -105,16 +182,148 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    function togglePwd(btnId, eyeId, inputId) {
+    // ── Referencias ───────────────────────────────────────────────
+    const inputPrimerNombre   = document.getElementById('primerNombre');
+    const inputSegundoNombre  = document.querySelector('[name="SegundoNombre"]');
+    const inputPrimerApellido = document.getElementById('primerApellido');
+    const inputUsuario        = document.getElementById('nombreUsuario');
+    const inputCorreo         = document.querySelector('[name="Correo"]');
+    const inputCelular        = document.querySelector('[name="Celular"]');
+    const inputDni            = document.querySelector('[name="Dni"]');
+
+    let usuarioEditado = false;
+
+    // ── Utilidad: mostrar feedback bajo un campo ──────────────────
+    function setFeed(feedId, iconId, estado, msg) {
+        // estado: 'ok' | 'error' | 'reset'
+        const feed = document.getElementById(feedId);
+        const icon = document.getElementById(iconId);
+        if (!feed || !icon) return;
+        if (estado === 'reset') {
+            feed.className = 'form-text small d-none';
+            icon.innerHTML = '';
+            return;
+        }
+        feed.className = 'form-text small ' + (estado === 'ok' ? 'text-success' : 'text-danger');
+        feed.innerHTML = msg;
+        feed.classList.remove('d-none');
+        icon.innerHTML = estado === 'ok'
+            ? '<i class="bi bi-check-circle-fill text-success"></i>'
+            : '<i class="bi bi-x-circle-fill text-danger"></i>';
+    }
+
+    // ── AJAX: verificar disponibilidad ────────────────────────────
+    async function verificar(campo, valor) {
+        if (!valor) return null;
+        try {
+            const r = await fetch(`/Account/Verificar?campo=${campo}&valor=${encodeURIComponent(valor)}`);
+            const d = await r.json();
+            return d.ocupado;
+        } catch { return null; }
+    }
+
+    // ── Auto-generar y verificar username ─────────────────────────
+    function computarUsername(usarSegundo) {
+        const src  = usarSegundo ? inputSegundoNombre : inputPrimerNombre;
+        const n    = (src?.value || '').trim().split(/\s+/)[0].toUpperCase();
+        const a    = inputPrimerApellido.value.trim().split(/\s+/)[0].toUpperCase();
+        return (n && a) ? `${n}.${a}` : (n || a || '');
+    }
+
+    function generarUsuario() {
+        if (usuarioEditado) return;
+        const u = computarUsername(false);
+        if (u) {
+            inputUsuario.value = u;
+            setFeed('feedUsuario', 'feedUsuarioIcon', 'reset', '');
+        }
+    }
+
+    inputPrimerNombre.addEventListener('input', generarUsuario);
+    inputPrimerApellido.addEventListener('input', generarUsuario);
+
+    // Verificar username al salir del campo
+    inputUsuario.addEventListener('blur', async function () {
+        if (!this.value.trim()) { usuarioEditado = false; return; }
+        const val = this.value.trim().toUpperCase();
+        const ocupado = await verificar('usuario', val);
+        if (ocupado === null) return;
+
+        if (ocupado) {
+            // ¿Tiene segundo nombre para intentar fallback?
+            const seg = (inputSegundoNombre?.value || '').trim();
+            if (!usuarioEditado && seg) {
+                const fallback = computarUsername(true);
+                const fbOcupado = await verificar('usuario', fallback);
+                if (!fbOcupado) {
+                    inputUsuario.value = fallback;
+                    usuarioEditado = false;
+                    setFeed('feedUsuario', 'feedUsuarioIcon', 'ok',
+                        `<i class="bi bi-magic me-1"></i>Usuario cambiado a <strong>${fallback}</strong> (usando tu segundo nombre).`);
+                } else {
+                    setFeed('feedUsuario', 'feedUsuarioIcon', 'error',
+                        `"${val}" y "${fallback}" ya están en uso. Elige otro usuario.`);
+                }
+            } else {
+                setFeed('feedUsuario', 'feedUsuarioIcon', 'error',
+                    `"${val}" ya está en uso. Elige otro nombre de usuario.`);
+            }
+        } else {
+            setFeed('feedUsuario', 'feedUsuarioIcon', 'ok', 'Usuario disponible.');
+        }
+    });
+
+    inputUsuario.addEventListener('input', function () {
+        usuarioEditado = this.value !== '';
+        setFeed('feedUsuario', 'feedUsuarioIcon', 'reset', '');
+    });
+
+    // ── Verificar correo ──────────────────────────────────────────
+    inputCorreo.addEventListener('blur', async function () {
+        const val = this.value.trim();
+        if (!val) return;
+        const ocupado = await verificar('correo', val);
+        if (ocupado === null) return;
+        ocupado
+            ? setFeed('feedCorreo', 'feedCorreoIcon', 'error', 'Este correo ya está registrado.')
+            : setFeed('feedCorreo', 'feedCorreoIcon', 'ok',    'Correo disponible.');
+    });
+    inputCorreo.addEventListener('input', () => setFeed('feedCorreo', 'feedCorreoIcon', 'reset', ''));
+
+    // ── Verificar celular ─────────────────────────────────────────
+    inputCelular.addEventListener('blur', async function () {
+        const val = this.value.trim();
+        if (!val) return;
+        const ocupado = await verificar('celular', val);
+        if (ocupado === null) return;
+        ocupado
+            ? setFeed('feedCelular', 'feedCelularIcon', 'error', 'Este celular ya está registrado.')
+            : setFeed('feedCelular', 'feedCelularIcon', 'ok',    'Celular disponible.');
+    });
+    inputCelular.addEventListener('input', () => setFeed('feedCelular', 'feedCelularIcon', 'reset', ''));
+
+    // ── Verificar DNI ─────────────────────────────────────────────
+    inputDni.addEventListener('blur', async function () {
+        const val = this.value.trim();
+        if (val.length !== 8) return;
+        const ocupado = await verificar('dni', val);
+        if (ocupado === null) return;
+        ocupado
+            ? setFeed('feedDni', 'feedDniIcon', 'error', 'Este DNI ya está registrado.')
+            : setFeed('feedDni', 'feedDniIcon', 'ok',    'DNI disponible.');
+    });
+    inputDni.addEventListener('input', () => setFeed('feedDni', 'feedDniIcon', 'reset', ''));
+
+    // ── Toggle contraseña ─────────────────────────────────────────
+    function togglePwd(btnId, eyeId, inputEl) {
         document.getElementById(btnId).addEventListener('click', function () {
-            const inp = document.getElementById(inputId);
             const icon = document.getElementById(eyeId);
-            inp.type = inp.type === 'password' ? 'text' : 'password';
-            icon.className = inp.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash';
+            inputEl.type = inputEl.type === 'password' ? 'text' : 'password';
+            icon.className = inputEl.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash';
         });
     }
-    togglePwd('togglePass1', 'eye1', 'Contrasena');
-    togglePwd('togglePass2', 'eye2', 'ConfirmarContrasena');
+    togglePwd('togglePass1', 'eye1', document.getElementById('Contrasena'));
+    togglePwd('togglePass2', 'eye2', document.getElementById('ConfirmarContrasena'));
 </script>
 </body>
 </html>

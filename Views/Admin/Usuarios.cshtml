@@ -60,11 +60,25 @@
                                 </div>
                                 <div>
                                     <div class="fw-semibold">@u.NombreUsuario</div>
+                                    @if (!string.IsNullOrEmpty(u.NombreCompleto))
+                                    {
+                                        <div class="text-muted small">@u.NombreCompleto</div>
+                                    }
                                     <div class="text-muted small">@u.FechaCreacion.ToString("dd/MM/yyyy")</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="text-muted small">@u.Correo</td>
+                        <td class="text-muted small">
+                            <div>@u.Correo</div>
+                            @if (!string.IsNullOrEmpty(u.Celular))
+                            {
+                                <div><i class="bi bi-phone me-1"></i>@u.Celular</div>
+                            }
+                            @if (!string.IsNullOrEmpty(u.Dni))
+                            {
+                                <div><i class="bi bi-credit-card me-1"></i>@u.Dni</div>
+                            }
+                        </td>
                         <td class="text-center">
                             @if (u.Rol == "Admin")
                             {
@@ -131,6 +145,10 @@
                         </td>
                         <td class="text-center">
                             <div class="d-flex gap-1 justify-content-center">
+                                <a asp-action="EditarUsuario" asp-route-id="@u.Id"
+                                   class="btn btn-sm btn-outline-warning" title="Editar usuario">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
                                 @if (u.Rol != "Admin")
                                 {
                                     <a asp-action="AsignarAcceso" asp-route-id="@u.Id"

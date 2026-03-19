@@ -68,7 +68,7 @@
                 <div>
                     Último examen@(ult.TipoNombre != "" ? $" ({ult.TipoNombre})" : ""):
                     <strong>@ult.Puntaje / @ult.TotalPreguntas puntos</strong>
-                    el @((DateTime)ult.FechaFin).ToString("dd/MM/yyyy 'a las' HH:mm")
+                    el @(((DateTime)ult.FechaFin).ToString("dd/MM/yyyy 'a las' HH:mm"))
                 </div>
                 <a asp-action="Historial" class="btn btn-sm btn-outline-primary ms-auto">
                     Ver historial
@@ -120,13 +120,14 @@
                                 }
                                 else
                                 {
-                                    <form asp-action="IniciarExamen" method="post">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="tipoExamenId" value="@tipo.Id"/>
-                                        <button type="submit" class="btn btn-success w-100">
-                                            <i class="bi bi-play-fill me-2"></i>Iniciar Examen
-                                        </button>
-                                    </form>
+                                    <button type="button" class="btn btn-success w-100 btn-iniciar"
+                                            data-tipoid="@tipo.Id"
+                                            data-nombre="@tipo.Nombre"
+                                            data-disponibles="@numPregs"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalModoExamen">
+                                        <i class="bi bi-play-fill me-2"></i>Iniciar Examen
+                                    </button>
                                 }
                             </div>
                         </div>
@@ -134,6 +135,168 @@
                 }
             </div>
         }
+    </div>
+</div>
+
+<!-- Modal: selección de modo de examen -->
+<div class="modal fade" id="modalModoExamen" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-sliders me-2 text-success"></i>
+                    Configurar Examen — <span id="modoNombreTipo"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <p class="text-muted small mb-3">Elige la cantidad de preguntas y la duración:</p>
+                <div class="row g-3" id="modoOpciones">
+
+                    <!-- Opción 20 -->
+                    <div class="col-12">
+                        <label class="d-block cursor-pointer modo-card" data-num="20">
+                            <input type="radio" name="modoExamen" value="20" class="d-none" checked />
+                            <div class="card border-2 border-success h-100 p-3 d-flex flex-row align-items-center gap-3">
+                                <div class="text-success" style="font-size:2rem"><i class="bi bi-infinity"></i></div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">20 preguntas</div>
+                                    <div class="text-muted small">Sin límite de tiempo — practica a tu ritmo</div>
+                                </div>
+                                <span class="badge bg-success">Seleccionado</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Opción 50 -->
+                    <div class="col-12 modo-wrapper" id="wrapper50">
+                        <label class="d-block cursor-pointer modo-card" data-num="50">
+                            <input type="radio" name="modoExamen" value="50" class="d-none" />
+                            <div class="card border-2 border-transparent h-100 p-3 d-flex flex-row align-items-center gap-3">
+                                <div class="text-warning" style="font-size:2rem"><i class="bi bi-clock"></i></div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">50 preguntas</div>
+                                    <div class="text-muted small">Tiempo límite: <strong>30 minutos</strong></div>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Opción 100 -->
+                    <div class="col-12 modo-wrapper" id="wrapper100">
+                        <label class="d-block cursor-pointer modo-card" data-num="100">
+                            <input type="radio" name="modoExamen" value="100" class="d-none" />
+                            <div class="card border-2 border-transparent h-100 p-3 d-flex flex-row align-items-center gap-3">
+                                <div class="text-danger" style="font-size:2rem"><i class="bi bi-stopwatch-fill"></i></div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">100 preguntas</div>
+                                    <div class="text-muted small">Tiempo límite: <strong>60 minutos</strong></div>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
+                </div>
+
+                <div id="avisoPreguntas" class="alert alert-warning small mt-3 d-none">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <span id="avisoText"></span>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formIniciar" asp-action="IniciarExamen" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="inputTipoId"     name="tipoExamenId" value="0" />
+                    <input type="hidden" id="inputNumPregs"   name="numPreguntas" value="20" />
+                    <button type="submit" class="btn btn-success px-4">
+                        <i class="bi bi-play-fill me-2"></i>Comenzar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // Poblar modal al abrir
+    document.querySelectorAll('.btn-iniciar').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const tipoId     = this.dataset.tipoid;
+            const nombre     = this.dataset.nombre;
+            const disponibles = parseInt(this.dataset.disponibles);
+
+            document.getElementById('modoNombreTipo').textContent = nombre;
+            document.getElementById('inputTipoId').value = tipoId;
+
+            // Mostrar/ocultar opciones según disponibilidad
+            ['50', '100'].forEach(function (n) {
+                const wrapper = document.getElementById('wrapper' + n);
+                const num     = parseInt(n);
+                const card    = wrapper.querySelector('.card');
+                const radio   = wrapper.querySelector('input[type=radio]');
+                if (disponibles < num) {
+                    wrapper.style.opacity = '0.45';
+                    wrapper.style.pointerEvents = 'none';
+                    radio.disabled = true;
+                    card.classList.add('border-secondary-subtle');
+                } else {
+                    wrapper.style.opacity = '';
+                    wrapper.style.pointerEvents = '';
+                    radio.disabled = false;
+                }
+            });
+
+            // Aviso si hay pocas preguntas
+            const aviso = document.getElementById('avisoPreguntas');
+            const avisoText = document.getElementById('avisoText');
+            const selNum = parseInt(document.querySelector('input[name="modoExamen"]:checked')?.value ?? '20');
+            if (disponibles < selNum) {
+                aviso.classList.remove('d-none');
+                avisoText.textContent = 'Solo hay ' + disponibles + ' preguntas disponibles. El examen se realizará con todas ellas.';
+            } else {
+                aviso.classList.add('d-none');
+            }
+
+            // Reset selección a 20
+            seleccionarModo(20);
+        });
+    });
+
+    // Selección visual de modo
+    function seleccionarModo(num) {
+        document.querySelectorAll('.modo-card').forEach(function (lbl) {
+            const n    = parseInt(lbl.dataset.num);
+            const card = lbl.querySelector('.card');
+            const badge = lbl.querySelector('.badge');
+            const radio = lbl.querySelector('input[type=radio]');
+            if (n === num) {
+                radio.checked = true;
+                card.className = card.className.replace('border-transparent', 'border-success');
+                if (!badge) {
+                    const b = document.createElement('span');
+                    b.className = 'badge bg-success';
+                    b.textContent = 'Seleccionado';
+                    card.appendChild(b);
+                }
+            } else {
+                radio.checked = false;
+                card.className = card.className.replace('border-success', 'border-transparent');
+                if (badge) badge.remove();
+            }
+        });
+        document.getElementById('inputNumPregs').value = num;
+    }
+
+    document.querySelectorAll('.modo-card').forEach(function (lbl) {
+        lbl.addEventListener('click', function () {
+            if (this.querySelector('input[type=radio]')?.disabled) return;
+            seleccionarModo(parseInt(this.dataset.num));
+        });
+    });
+</script>
+}
 
     </div>
 </div>

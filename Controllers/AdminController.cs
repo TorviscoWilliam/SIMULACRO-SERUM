@@ -168,7 +168,13 @@ namespace SimulacroExamen.Controllers
                         ? u.Examenes.Where(e => e.Completado).Max(e => e.Puntaje)
                         : 0,
                     TiposAsignados = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList(),
-                    IntentosExtra  = u.IntentosExtra
+                    IntentosExtra  = u.IntentosExtra,
+                    NombreCompleto = (u.PrimerNombre != null || u.PrimerApellido != null)
+                        ? string.Join(" ", new[] { u.PrimerNombre, u.SegundoNombre, u.PrimerApellido, u.SegundoApellido }
+                            .Where(s => s != null))
+                        : null,
+                    Celular = u.Celular,
+                    Dni     = u.Dni
                 })
                 .ToListAsync();
 
@@ -238,6 +244,76 @@ namespace SimulacroExamen.Controllers
 
             await _db.SaveChangesAsync();
             TempData["Exito"] = $"Usuario '{nombreUpper}' creado correctamente.";
+            return RedirectToAction(nameof(Usuarios));
+        }
+
+        // GET /Admin/EditarUsuario/{id}
+        public async Task<IActionResult> EditarUsuario(int id)
+        {
+            var usuario = await _db.Usuarios.FindAsync(id);
+            if (usuario == null) return NotFound();
+
+            var vm = new EditarUsuarioViewModel
+            {
+                Id             = usuario.Id,
+                NombreUsuario  = usuario.NombreUsuario,
+                Correo         = usuario.Correo,
+                Rol            = usuario.Rol,
+                PrimerNombre   = usuario.PrimerNombre,
+                SegundoNombre  = usuario.SegundoNombre,
+                PrimerApellido = usuario.PrimerApellido,
+                SegundoApellido = usuario.SegundoApellido,
+                Celular        = usuario.Celular,
+                Dni            = usuario.Dni
+            };
+            return View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditarUsuario(EditarUsuarioViewModel vm)
+        {
+            if (!ModelState.IsValid)
+                return View(vm);
+
+            var usuario = await _db.Usuarios.FindAsync(vm.Id);
+            if (usuario == null) return NotFound();
+
+            var nombreUpper = vm.NombreUsuario.Trim().ToUpperInvariant();
+
+            if (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == nombreUpper && u.Id != vm.Id))
+            {
+                ModelState.AddModelError(nameof(vm.NombreUsuario), "El nombre de usuario ya existe");
+                return View(vm);
+            }
+
+            if (await _db.Usuarios.AnyAsync(u => u.Correo == vm.Correo.Trim() && u.Id != vm.Id))
+            {
+                ModelState.AddModelError(nameof(vm.Correo), "El correo ya está registrado");
+                return View(vm);
+            }
+
+            if (vm.Rol != "Admin" && vm.Rol != "Usuario")
+            {
+                ModelState.AddModelError(nameof(vm.Rol), "Rol inválido");
+                return View(vm);
+            }
+
+            usuario.NombreUsuario   = nombreUpper;
+            usuario.Correo          = vm.Correo.Trim();
+            usuario.Rol             = vm.Rol;
+            usuario.PrimerNombre    = string.IsNullOrWhiteSpace(vm.PrimerNombre)    ? null : vm.PrimerNombre.Trim().ToUpperInvariant();
+            usuario.SegundoNombre   = string.IsNullOrWhiteSpace(vm.SegundoNombre)   ? null : vm.SegundoNombre.Trim().ToUpperInvariant();
+            usuario.PrimerApellido  = string.IsNullOrWhiteSpace(vm.PrimerApellido)  ? null : vm.PrimerApellido.Trim().ToUpperInvariant();
+            usuario.SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim().ToUpperInvariant();
+            usuario.Celular         = string.IsNullOrWhiteSpace(vm.Celular) ? null : vm.Celular.Trim();
+            usuario.Dni             = string.IsNullOrWhiteSpace(vm.Dni)    ? null : vm.Dni.Trim();
+
+            if (!string.IsNullOrWhiteSpace(vm.ContrasenaNueva))
+                usuario.Contrasena = BCrypt.Net.BCrypt.HashPassword(vm.ContrasenaNueva);
+
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = $"Usuario '{nombreUpper}' actualizado correctamente.";
             return RedirectToAction(nameof(Usuarios));
         }
 

@@ -3,7 +3,8 @@
     ViewData["Title"] = "Examen en Curso";
     Layout = "_Layout";
     int totalPregs   = Model.Preguntas.Count;
-    int segRestantes = (int)(ViewBag.SegundosRestantes ?? 3600);
+    bool sinTiempo   = ViewBag.SegundosRestantes == null;
+    int segRestantes = sinTiempo ? 0 : (int)ViewBag.SegundosRestantes;
 }
 
 <div class="row justify-content-center">
@@ -19,10 +20,19 @@
                     </h5>
                     <p class="text-muted small mb-0">@totalPregs pregunta(s)</p>
                 </div>
-                <div id="timerBox" class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
-                    <i class="bi bi-stopwatch me-1"></i>
-                    <span id="cronometro">--:--</span>
-                </div>
+                @if (sinTiempo)
+                {
+                    <div id="timerBox" class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6">
+                        <i class="bi bi-infinity me-1"></i>Sin límite de tiempo
+                    </div>
+                }
+                else
+                {
+                    <div id="timerBox" class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
+                        <i class="bi bi-stopwatch me-1"></i>
+                        <span id="cronometro">--:--</span>
+                    </div>
+                }
             </div>
         </div>
 
@@ -237,46 +247,50 @@
 
     function enviarExamen() {
         examEnviado = true;
-        clearInterval(crono);
+        if (crono) clearInterval(crono);
         document.getElementById('formExamen').submit();
     }
 
     // ── Temporizador regresivo ───────────────────────────────────
+    const SIN_TIEMPO   = @(sinTiempo ? "true" : "false");
     let segundos       = @segRestantes;
     const ALERTA_SEG   = 15 * 60;
     let alertaMostrada = false;
+    let crono          = null;
 
     function formatTiempo(s) {
         return String(Math.floor(s / 60)).padStart(2,'0') + ':' +
                String(s % 60).padStart(2,'0');
     }
 
-    document.getElementById('cronometro').textContent = formatTiempo(segundos);
-
-    const crono = setInterval(() => {
-        if (segundos <= 0) {
-            clearInterval(crono);
-            examEnviado = true;
-            document.getElementById('formExamen').submit();
-            return;
-        }
-        segundos--;
+    if (!SIN_TIEMPO) {
         document.getElementById('cronometro').textContent = formatTiempo(segundos);
 
-        // Alerta a 15 minutos restantes
-        if (segundos === ALERTA_SEG && !alertaMostrada) {
-            alertaMostrada = true;
-            new bootstrap.Modal(document.getElementById('modalAlerta15')).show();
-        }
+        crono = setInterval(() => {
+            if (segundos <= 0) {
+                clearInterval(crono);
+                examEnviado = true;
+                document.getElementById('formExamen').submit();
+                return;
+            }
+            segundos--;
+            document.getElementById('cronometro').textContent = formatTiempo(segundos);
 
-        // Cambiar color del temporizador
-        const box = document.getElementById('timerBox');
-        if (segundos <= 300) { // últimos 5 min → rojo
-            box.className = 'badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6';
-        } else if (segundos <= ALERTA_SEG) { // últimos 15 min → amarillo
-            box.className = 'badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fs-6';
-        }
-    }, 1000);
+            // Alerta a 15 minutos restantes
+            if (segundos === ALERTA_SEG && !alertaMostrada) {
+                alertaMostrada = true;
+                new bootstrap.Modal(document.getElementById('modalAlerta15')).show();
+            }
+
+            // Cambiar color del temporizador
+            const box = document.getElementById('timerBox');
+            if (segundos <= 300) {
+                box.className = 'badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6';
+            } else if (segundos <= ALERTA_SEG) {
+                box.className = 'badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fs-6';
+            }
+        }, 1000);
+    }
 
     // Advertencia al cerrar pestaña/navegar fuera
     window.addEventListener('beforeunload', function (e) {
