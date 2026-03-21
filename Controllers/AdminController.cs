@@ -117,7 +117,7 @@ namespace SimulacroExamen.Controllers
                     TipoExamen       = e.TipoExamen != null ? e.TipoExamen.Nombre : "Sin tipo",
                     Puntaje          = e.Puntaje,
                     TotalPreguntas   = e.TotalPreguntas,
-                    PuntajeVigesimal = Math.Round(e.Puntaje * 0.2, 2),
+                    PuntajeVigesimal = e.TotalPreguntas > 0 ? Math.Round((double)e.Puntaje / e.TotalPreguntas * 20, 2) : 0,
                     Porcentaje       = Math.Round((double)e.Puntaje / e.TotalPreguntas * 100, 1),
                     FechaFin         = e.FechaFin!.Value
                 })
