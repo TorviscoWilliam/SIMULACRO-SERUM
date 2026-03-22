@@ -393,6 +393,7 @@ namespace SimulacroExamen.Controllers
                     Titulo           = n.Titulo,
                     Contenido        = n.Contenido,
                     ImagenRuta       = n.ImagenRuta,
+                    EnlaceUrl        = n.EnlaceUrl,
                     FechaPublicacion = n.FechaPublicacion,
                     AdminNombre      = n.Admin != null ? n.Admin.NombreUsuario : "",
                     Activo           = n.Activo

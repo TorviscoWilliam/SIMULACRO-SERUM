@@ -867,6 +867,7 @@ namespace SimulacroExamen.Controllers
                     Titulo           = n.Titulo,
                     Contenido        = n.Contenido,
                     ImagenRuta       = n.ImagenRuta,
+                    EnlaceUrl        = n.EnlaceUrl,
                     FechaPublicacion = n.FechaPublicacion,
                     AdminNombre      = n.Admin != null ? n.Admin.NombreUsuario : "",
                     Activo           = n.Activo
@@ -921,6 +922,7 @@ namespace SimulacroExamen.Controllers
                 Titulo           = vm.Titulo.Trim(),
                 Contenido        = vm.Contenido.Trim(),
                 ImagenRuta       = imagenRuta,
+                EnlaceUrl        = string.IsNullOrWhiteSpace(vm.EnlaceUrl) ? null : vm.EnlaceUrl.Trim(),
                 FechaPublicacion = DateTime.Now,
                 AdminId          = adminId,
                 Activo           = true
@@ -928,6 +930,79 @@ namespace SimulacroExamen.Controllers
 
             await _db.SaveChangesAsync();
             TempData["Exito"] = "Noticia publicada correctamente.";
+            return RedirectToAction(nameof(Noticias));
+        }
+
+        // GET /Admin/EditarNoticia/{id}
+        public async Task<IActionResult> EditarNoticia(int id)
+        {
+            var n = await _db.Noticias.FindAsync(id);
+            if (n == null) return NotFound();
+
+            return View(new EditarNoticiaViewModel
+            {
+                Id               = n.Id,
+                Titulo           = n.Titulo,
+                Contenido        = n.Contenido,
+                ImagenRutaActual = n.ImagenRuta,
+                EnlaceUrl        = n.EnlaceUrl
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditarNoticia(EditarNoticiaViewModel vm)
+        {
+            if (!ModelState.IsValid) return View(vm);
+
+            var n = await _db.Noticias.FindAsync(vm.Id);
+            if (n == null) return NotFound();
+
+            if (vm.Imagen != null && vm.Imagen.Length > 0)
+            {
+                var ext = Path.GetExtension(vm.Imagen.FileName).ToLowerInvariant();
+                var extsPermitidas = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+                if (!extsPermitidas.Contains(ext))
+                {
+                    ModelState.AddModelError("Imagen", "Solo se permiten imágenes (.jpg, .png, .gif, .webp).");
+                    vm.ImagenRutaActual = n.ImagenRuta;
+                    return View(vm);
+                }
+
+                const long maxSize = 5 * 1024 * 1024;
+                if (vm.Imagen.Length > maxSize)
+                {
+                    ModelState.AddModelError("Imagen", "La imagen no puede superar 5 MB.");
+                    vm.ImagenRutaActual = n.ImagenRuta;
+                    return View(vm);
+                }
+
+                // Eliminar imagen anterior
+                if (!string.IsNullOrEmpty(n.ImagenRuta))
+                {
+                    var oldPath = Path.Combine(_env.WebRootPath, n.ImagenRuta.TrimStart('/'));
+                    if (System.IO.File.Exists(oldPath))
+                        System.IO.File.Delete(oldPath);
+                }
+
+                var uploadsDir = Path.Combine(_env.WebRootPath, "uploads", "noticias");
+                Directory.CreateDirectory(uploadsDir);
+
+                var fileName = $"{Guid.NewGuid()}{ext}";
+                var filePath = Path.Combine(uploadsDir, fileName);
+
+                await using var stream = new FileStream(filePath, FileMode.Create);
+                await vm.Imagen.CopyToAsync(stream);
+
+                n.ImagenRuta = $"/uploads/noticias/{fileName}";
+            }
+
+            n.Titulo    = vm.Titulo.Trim();
+            n.Contenido = vm.Contenido.Trim();
+            n.EnlaceUrl = string.IsNullOrWhiteSpace(vm.EnlaceUrl) ? null : vm.EnlaceUrl.Trim();
+
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = "Noticia actualizada correctamente.";
             return RedirectToAction(nameof(Noticias));
         }
 

@@ -183,12 +183,19 @@ static void MigrarEsquema(ApplicationDbContext context)
                    Titulo            NVARCHAR(200)    NOT NULL,
                    Contenido         NVARCHAR(MAX)    NOT NULL,
                    ImagenRuta        NVARCHAR(500)    NULL,
+                   EnlaceUrl         NVARCHAR(1000)   NULL,
                    FechaPublicacion  DATETIME2        NOT NULL DEFAULT GETDATE(),
                    AdminId           INT              NOT NULL,
                    Activo            BIT              NOT NULL DEFAULT 1,
                    CONSTRAINT FK_Noticias_Usuarios FOREIGN KEY (AdminId)
                        REFERENCES Usuarios(Id) ON DELETE NO ACTION
                )");
+
+        // Columna EnlaceUrl en Noticias (para bases existentes)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Noticias' AND COLUMN_NAME='EnlaceUrl')
+               ALTER TABLE Noticias ADD EnlaceUrl NVARCHAR(1000) NULL");
 
         conn.Close();
     }

@@ -17,6 +17,10 @@ namespace SimulacroExamen.Models
         [MaxLength(500)]
         public string? ImagenRuta { get; set; }
 
+        /// <summary>URL externa opcional a la que se puede redirigir al usuario (ej. enlace de convocatoria).</summary>
+        [MaxLength(1000)]
+        public string? EnlaceUrl { get; set; }
+
         public DateTime FechaPublicacion { get; set; } = DateTime.Now;
 
         public int AdminId { get; set; }

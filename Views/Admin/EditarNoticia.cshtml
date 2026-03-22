@@ -1,16 +1,18 @@
-@model SimulacroExamen.ViewModels.CrearNoticiaViewModel
+@model SimulacroExamen.ViewModels.EditarNoticiaViewModel
 @{
-    ViewData["Title"] = "Nueva Noticia";
+    ViewData["Title"] = "Editar Noticia";
 }
 
 <div class="row justify-content-center">
     <div class="col-lg-7">
 
-        <h2 class="fw-bold mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Nueva Noticia</h2>
-        <p class="text-muted mb-4">Publica un anuncio visible para todos los estudiantes.</p>
+        <h2 class="fw-bold mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Editar Noticia</h2>
+        <p class="text-muted mb-4">Modifica el contenido de la noticia publicada.</p>
 
-        <form asp-action="CrearNoticia" method="post" enctype="multipart/form-data">
+        <form asp-action="EditarNoticia" method="post" enctype="multipart/form-data">
             @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="Id" />
+            <input type="hidden" asp-for="ImagenRutaActual" />
 
             <div class="card border-0 shadow-sm">
                 <div class="card-body p-4">
@@ -30,6 +32,14 @@
 
                     <div class="mb-3">
                         <label asp-for="Imagen" class="form-label fw-semibold"></label>
+                        @if (!string.IsNullOrEmpty(Model.ImagenRutaActual))
+                        {
+                            <div class="mb-2">
+                                <img src="@Model.ImagenRutaActual" alt="Imagen actual"
+                                     class="img-thumbnail" style="max-height:120px" />
+                                <div class="form-text">Imagen actual. Sube una nueva para reemplazarla.</div>
+                            </div>
+                        }
                         <input asp-for="Imagen" type="file" class="form-control"
                                accept=".jpg,.jpeg,.png,.gif,.webp" />
                         <div class="form-text">Opcional · Formatos: JPG, PNG, GIF, WEBP · Máx. 5 MB</div>
@@ -39,7 +49,7 @@
                     <div class="mb-0">
                         <label asp-for="EnlaceUrl" class="form-label fw-semibold"></label>
                         <input asp-for="EnlaceUrl" class="form-control" placeholder="https://ejemplo.com/convocatoria" />
-                        <div class="form-text">Opcional · El botón de enlace aparecerá en la tarjeta de la noticia.</div>
+                        <div class="form-text">Opcional · Deja en blanco para quitar el enlace.</div>
                         <span asp-validation-for="EnlaceUrl" class="text-danger small"></span>
                     </div>
 
@@ -48,7 +58,7 @@
 
             <div class="d-flex gap-3 mt-4">
                 <button type="submit" class="btn btn-primary btn-lg flex-fill">
-                    <i class="bi bi-send me-2"></i>Publicar noticia
+                    <i class="bi bi-save me-2"></i>Guardar cambios
                 </button>
                 <a asp-action="Noticias" class="btn btn-outline-secondary btn-lg">
                     <i class="bi bi-arrow-left me-2"></i>Cancelar
