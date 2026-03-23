@@ -232,7 +232,7 @@ namespace SimulacroExamen.Controllers
 
         private IActionResult RedirectToRol()
         {
-            if (User.IsInRole("Admin"))
+            if (User.IsInRole("Admin") || User.IsInRole("SuperAdmin"))
                 return RedirectToAction("Index", "Admin");
 
             return RedirectToAction("Index", "Examen");

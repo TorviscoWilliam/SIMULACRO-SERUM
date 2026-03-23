@@ -20,7 +20,7 @@
 <body>
     @{
         bool isAuthenticated = User.Identity?.IsAuthenticated == true;
-        bool isAdmin         = User.IsInRole("Admin");
+        bool isAdmin         = User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
     }
 
     <!-- ── Navbar ─────────────────────────────────────────────── -->
