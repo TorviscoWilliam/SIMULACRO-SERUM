@@ -274,6 +274,79 @@ namespace SimulacroExamen.Services
             wb.SaveAs(ms);
             return ms.ToArray();
         }
+
+        // ── Importar usuarios desde Excel ─────────────────────────────
+        public List<(string Usuario, string Correo, string Contrasena, string? PrimerNombre,
+                     string? PrimerApellido, string? Celular, string? Dni)> ImportarUsuarios(Stream stream)
+        {
+            var lista = new List<(string, string, string, string?, string?, string?, string?)>();
+
+            using var wb = new XLWorkbook(stream);
+            var ws = wb.Worksheet(1);
+            int lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+
+            for (int row = 2; row <= lastRow; row++)
+            {
+                var usuario  = ws.Cell(row, 1).GetString().Trim().ToUpperInvariant();
+                var correo   = ws.Cell(row, 2).GetString().Trim();
+                var clave    = ws.Cell(row, 3).GetString().Trim();
+                var nombre   = ws.Cell(row, 4).GetString().Trim().NullIfEmpty();
+                var apellido = ws.Cell(row, 5).GetString().Trim().NullIfEmpty();
+                var celular  = ws.Cell(row, 6).GetString().Trim().NullIfEmpty();
+                var dni      = ws.Cell(row, 7).GetString().Trim().NullIfEmpty();
+
+                if (string.IsNullOrEmpty(usuario) || string.IsNullOrEmpty(correo) || string.IsNullOrEmpty(clave))
+                    continue;
+
+                lista.Add((usuario, correo, clave, nombre, apellido, celular, dni));
+            }
+
+            return lista;
+        }
+
+        // ── Plantilla para importar usuarios ─────────────────────────
+        public byte[] GenerarPlantillaUsuarios()
+        {
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("Usuarios");
+
+            string[] headers = {
+                "Usuario *", "Correo *", "Contraseña *",
+                "Primer Nombre", "Primer Apellido", "Celular", "DNI"
+            };
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var cell = ws.Cell(1, i + 1);
+                cell.Value = headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#2980b9");
+                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
+            ws.Cell(2, 1).Value = "JUAN123";
+            ws.Cell(2, 2).Value = "juan@correo.com";
+            ws.Cell(2, 3).Value = "clave123";
+            ws.Cell(2, 4).Value = "Juan";
+            ws.Cell(2, 5).Value = "Pérez";
+            ws.Cell(2, 6).Value = "999888777";
+            ws.Cell(2, 7).Value = "12345678";
+
+            var nota = ws.Cell(4, 1);
+            nota.Value = "NOTA: Los campos marcados con * son obligatorios. El usuario se guardará en MAYÚSCULAS.";
+            nota.Style.Font.Italic = true;
+            nota.Style.Font.FontColor = XLColor.FromHtml("#c0392b");
+            ws.Range(4, 1, 4, 7).Merge();
+
+            ws.Columns().AdjustToContents();
+            ws.Column(2).Width = 30;
+            ws.SheetView.FreezeRows(1);
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
+        }
     }
 
     /// <summary>

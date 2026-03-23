@@ -69,7 +69,7 @@ namespace SimulacroExamen.Controllers
             if (!string.IsNullOrEmpty(vm.ReturnUrl) && Url.IsLocalUrl(vm.ReturnUrl))
                 return Redirect(vm.ReturnUrl);
 
-            return usuario.Rol == "Admin"
+            return (usuario.Rol == "Admin" || usuario.Rol == "SuperAdmin")
                 ? RedirectToAction("Index", "Admin")
                 : RedirectToAction("Index", "Examen");
         }
@@ -96,10 +96,15 @@ namespace SimulacroExamen.Controllers
 
         // ── GET /Account/Register ────────────────────────────────────
         [HttpGet]
-        public IActionResult Register()
+        public async Task<IActionResult> Register()
         {
             if (User.Identity?.IsAuthenticated == true)
                 return RedirectToRol();
+
+            ViewBag.TiposExamen = await _db.TiposExamen
+                .Where(t => t.Activo)
+                .OrderBy(t => t.Nombre)
+                .ToListAsync();
 
             return View(new RegisterViewModel());
         }
@@ -109,26 +114,45 @@ namespace SimulacroExamen.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Register(RegisterViewModel vm)
         {
+            // Recargar tipos para la vista en caso de error
+            async Task RecargarTipos() =>
+                ViewBag.TiposExamen = await _db.TiposExamen
+                    .Where(t => t.Activo).OrderBy(t => t.Nombre).ToListAsync();
+
             if (!ModelState.IsValid)
+            {
+                await RecargarTipos();
                 return View(vm);
+            }
+
+            // Validar que el tipo de examen exista y esté activo
+            var tipoExamen = await _db.TiposExamen
+                .FirstOrDefaultAsync(t => t.Id == vm.TipoExamenId && t.Activo);
+
+            if (tipoExamen == null)
+            {
+                ModelState.AddModelError(nameof(vm.TipoExamenId), "El tipo de examen seleccionado no es válido.");
+                await RecargarTipos();
+                return View(vm);
+            }
 
             // ── Validar unicidad de correo, celular y DNI ────────────
             if (await _db.Usuarios.AnyAsync(u => u.Correo == vm.Correo.Trim()))
             {
                 ModelState.AddModelError(nameof(vm.Correo), "Ese correo ya está registrado.");
-                return View(vm);
+                await RecargarTipos(); return View(vm);
             }
 
             if (await _db.Usuarios.AnyAsync(u => u.Celular == vm.Celular.Trim()))
             {
                 ModelState.AddModelError(nameof(vm.Celular), "Ese número de celular ya está registrado.");
-                return View(vm);
+                await RecargarTipos(); return View(vm);
             }
 
             if (await _db.Usuarios.AnyAsync(u => u.Dni == vm.Dni.Trim()))
             {
                 ModelState.AddModelError(nameof(vm.Dni), "Ese DNI ya está registrado.");
-                return View(vm);
+                await RecargarTipos(); return View(vm);
             }
 
             // ── Resolver username con fallback a SegundoNombre ───────
@@ -136,37 +160,34 @@ namespace SimulacroExamen.Controllers
 
             if (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == nombreUpper))
             {
-                // Calcular el username auto-generado original para detectar si el usuario
-                // no lo editó manualmente (coincide con PrimerNombre.PrimerApellido)
-                var primerN   = vm.PrimerNombre.Trim().Split(' ')[0].ToUpperInvariant();
-                var primerA   = vm.PrimerApellido.Trim().Split(' ')[0].ToUpperInvariant();
+                var primerN     = vm.PrimerNombre.Trim().Split(' ')[0].ToUpperInvariant();
+                var primerA     = vm.PrimerApellido.Trim().Split(' ')[0].ToUpperInvariant();
                 var usernameGen = $"{primerN}.{primerA}";
 
                 if (nombreUpper == usernameGen && !string.IsNullOrWhiteSpace(vm.SegundoNombre))
                 {
-                    // Intentar fallback con SegundoNombre.PrimerApellido
-                    var segundoN  = vm.SegundoNombre.Trim().Split(' ')[0].ToUpperInvariant();
-                    var fallback  = $"{segundoN}.{primerA}";
+                    var segundoN = vm.SegundoNombre.Trim().Split(' ')[0].ToUpperInvariant();
+                    var fallback = $"{segundoN}.{primerA}";
 
                     if (!await _db.Usuarios.AnyAsync(u => u.NombreUsuario == fallback))
                     {
-                        nombreUpper = fallback; // aplicar fallback automáticamente
+                        nombreUpper = fallback;
                     }
                     else
                     {
                         ModelState.AddModelError(nameof(vm.NombreUsuario),
                             $"'{usernameGen}' y '{fallback}' ya están en uso. Por favor elige un nombre de usuario diferente.");
-                        return View(vm);
+                        await RecargarTipos(); return View(vm);
                     }
                 }
                 else
                 {
                     ModelState.AddModelError(nameof(vm.NombreUsuario), "Ese nombre de usuario ya está en uso.");
-                    return View(vm);
+                    await RecargarTipos(); return View(vm);
                 }
             }
 
-            _db.Usuarios.Add(new Usuario
+            var nuevoUsuario = new Usuario
             {
                 NombreUsuario   = nombreUpper,
                 Correo          = vm.Correo.Trim(),
@@ -174,17 +195,28 @@ namespace SimulacroExamen.Controllers
                 Rol             = "Usuario",
                 FechaCreacion   = DateTime.Now,
                 Activo          = true,
+                EsTrial         = true,
                 PrimerNombre    = vm.PrimerNombre.Trim().ToUpperInvariant(),
                 SegundoNombre   = string.IsNullOrWhiteSpace(vm.SegundoNombre) ? null : vm.SegundoNombre.Trim().ToUpperInvariant(),
                 PrimerApellido  = vm.PrimerApellido.Trim().ToUpperInvariant(),
                 SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim().ToUpperInvariant(),
                 Celular         = vm.Celular.Trim(),
                 Dni             = vm.Dni.Trim()
-            });
+            };
 
+            _db.Usuarios.Add(nuevoUsuario);
             await _db.SaveChangesAsync();
 
-            TempData["Exito"] = "Cuenta creada exitosamente. Inicia sesión.";
+            // Asignar acceso al tipo de examen seleccionado
+            _db.UsuarioTiposExamen.Add(new UsuarioTipoExamen
+            {
+                UsuarioId       = nuevoUsuario.Id,
+                TipoExamenId    = vm.TipoExamenId,
+                FechaAsignacion = DateTime.Now
+            });
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = $"Cuenta creada exitosamente. Tienes 1 examen de prueba de {tipoExamen.Nombre}. Inicia sesión.";
             return RedirectToAction(nameof(Login));
         }
 

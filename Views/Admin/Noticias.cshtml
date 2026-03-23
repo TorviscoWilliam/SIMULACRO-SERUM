@@ -1,12 +1,15 @@
 @model List<SimulacroExamen.ViewModels.NoticiaListaVM>
 @{
     ViewData["Title"] = "Noticias";
+    int page       = (int)ViewBag.Page;
+    int totalPages = (int)ViewBag.TotalPages;
+    int totalItems = (int)ViewBag.TotalItems;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h2 class="fw-bold mb-0"><i class="bi bi-megaphone me-2 text-primary"></i>Noticias</h2>
-        <p class="text-muted mb-0">@Model.Count noticia(s) publicada(s)</p>
+        <p class="text-muted mb-0">@totalItems noticia(s) publicada(s)</p>
     </div>
     <a asp-action="CrearNoticia" class="btn btn-primary">
         <i class="bi bi-plus-circle me-2"></i>Nueva Noticia
@@ -35,7 +38,17 @@ else
                         <img src="@n.ImagenRuta" class="card-img-top object-fit-cover" style="height:180px" alt="@n.Titulo" />
                     }
                     <div class="card-body d-flex flex-column">
-                        <h5 class="fw-bold card-title">@n.Titulo</h5>
+                        <div class="d-flex align-items-start justify-content-between mb-1 gap-2">
+                            <h5 class="fw-bold card-title mb-0">@n.Titulo</h5>
+                            @if (n.Activo)
+                            {
+                                <span class="badge bg-success flex-shrink-0">Activa</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary flex-shrink-0">Inactiva</span>
+                            }
+                        </div>
                         <p class="card-text text-muted small flex-grow-1"
                            style="white-space:pre-line;max-height:100px;overflow:hidden">@n.Contenido</p>
                         @if (!string.IsNullOrEmpty(n.EnlaceUrl))
@@ -52,10 +65,24 @@ else
                             <span><i class="bi bi-person me-1"></i>@n.AdminNombre</span>
                         </div>
                     </div>
-                    <div class="card-footer bg-white d-flex justify-content-end gap-2">
+                    <div class="card-footer bg-white d-flex justify-content-end gap-2 flex-wrap">
                         <a asp-action="EditarNoticia" asp-route-id="@n.Id" class="btn btn-sm btn-outline-secondary">
                             <i class="bi bi-pencil me-1"></i>Editar
                         </a>
+                        <form asp-action="ToggleNoticia" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@n.Id"/>
+                            <button type="submit" class="btn btn-sm @(n.Activo ? "btn-outline-warning" : "btn-outline-success")">
+                                @if (n.Activo)
+                                {
+                                    <i class="bi bi-eye-slash me-1"></i><text>Desactivar</text>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-eye me-1"></i><text>Activar</text>
+                                }
+                            </button>
+                        </form>
                         <form asp-action="EliminarNoticia" method="post"
                               onsubmit="return confirm('¿Eliminar esta noticia?')">
                             @Html.AntiForgeryToken()
@@ -69,4 +96,28 @@ else
             </div>
         }
     </div>
+
+    @if (totalPages > 1)
+    {
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item @(page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="Noticias" asp-route-page="@(page - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                @for (int i = 1; i <= totalPages; i++)
+                {
+                    <li class="page-item @(i == page ? "active" : "")">
+                        <a class="page-link" asp-action="Noticias" asp-route-page="@i">@i</a>
+                    </li>
+                }
+                <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="Noticias" asp-route-page="@(page + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    }
 }

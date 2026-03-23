@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "Crear Cuenta";
     Layout = null;
+    var tiposExamen = (List<SimulacroExamen.Models.TipoExamen>)(ViewBag.TiposExamen ?? new List<SimulacroExamen.Models.TipoExamen>());
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -162,6 +163,28 @@
                                 </button>
                             </div>
                             <span asp-validation-for="ConfirmarContrasena" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Tipo de examen de prueba -->
+                        <hr class="my-3"/>
+                        <h6 class="fw-bold mb-3 text-primary">
+                            <i class="bi bi-mortarboard me-2"></i>Elige tu Examen de Prueba
+                        </h6>
+                        <div class="mb-3">
+                            <label asp-for="TipoExamenId" class="form-label fw-semibold small"></label>
+                            <select asp-for="TipoExamenId" class="form-select form-select-sm">
+                                <option value="">-- Selecciona un tipo de examen --</option>
+                                @foreach (var tipo in tiposExamen)
+                                {
+                                    <option value="@tipo.Id">@tipo.Nombre</option>
+                                }
+                            </select>
+                            <span asp-validation-for="TipoExamenId" class="text-danger small"></span>
+                        </div>
+                        <div class="alert alert-info py-2 small mb-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Al registrarte tendrás acceso a <strong>1 examen de prueba de 20 preguntas</strong>.
+                            Luego contacta al administrador para obtener acceso completo.
                         </div>
 
                         <button type="submit" class="btn btn-primary w-100 fw-bold py-2">

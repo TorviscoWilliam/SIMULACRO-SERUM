@@ -4,7 +4,7 @@
 }
 
 <div class="row justify-content-center">
-    <div class="col-md-7 col-lg-5">
+    <div class="col-md-8 col-lg-6">
 
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white border-0 py-4">
@@ -20,6 +20,50 @@
                 <form asp-action="CrearUsuario" method="post">
                     <div asp-validation-summary="ModelOnly"
                          class="alert alert-danger py-2 small"></div>
+
+                    <p class="fw-semibold text-muted small text-uppercase mb-2">Datos personales</p>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label asp-for="PrimerNombre" class="form-label fw-semibold"></label>
+                            <input asp-for="PrimerNombre" class="form-control" placeholder="Primer nombre" />
+                            <span asp-validation-for="PrimerNombre" class="text-danger small"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="SegundoNombre" class="form-label fw-semibold"></label>
+                            <input asp-for="SegundoNombre" class="form-control" placeholder="Segundo nombre" />
+                            <span asp-validation-for="SegundoNombre" class="text-danger small"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="PrimerApellido" class="form-label fw-semibold"></label>
+                            <input asp-for="PrimerApellido" class="form-control" placeholder="Primer apellido" />
+                            <span asp-validation-for="PrimerApellido" class="text-danger small"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="SegundoApellido" class="form-label fw-semibold"></label>
+                            <input asp-for="SegundoApellido" class="form-control" placeholder="Segundo apellido" />
+                            <span asp-validation-for="SegundoApellido" class="text-danger small"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="Celular" class="form-label fw-semibold"></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                <input asp-for="Celular" class="form-control" placeholder="Número de celular" />
+                            </div>
+                            <span asp-validation-for="Celular" class="text-danger small"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="Dni" class="form-label fw-semibold"></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-card-text"></i></span>
+                                <input asp-for="Dni" class="form-control" placeholder="DNI" />
+                            </div>
+                            <span asp-validation-for="Dni" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <hr class="my-3"/>
+                    <p class="fw-semibold text-muted small text-uppercase mb-2">Credenciales</p>
 
                     <div class="mb-3">
                         <label asp-for="NombreUsuario" class="form-label fw-semibold"></label>
@@ -67,16 +111,32 @@
                         <span asp-validation-for="ConfirmarContrasena" class="text-danger small"></span>
                     </div>
 
-                    <div class="mb-4">
+                    <hr class="my-3"/>
+                    <p class="fw-semibold text-muted small text-uppercase mb-2">Acceso</p>
+
+                    <div class="mb-3">
                         <label asp-for="Rol" class="form-label fw-semibold"></label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-shield"></i></span>
                             <select asp-for="Rol" class="form-select">
                                 <option value="Usuario">Estudiante</option>
                                 <option value="Admin">Administrador</option>
+                                @if (User.IsInRole("SuperAdmin"))
+                                {
+                                    <option value="SuperAdmin">Administrador Principal</option>
+                                }
                             </select>
                         </div>
                         <span asp-validation-for="Rol" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input asp-for="EsTrial" class="form-check-input" type="checkbox" role="switch" id="esTrialSwitch"/>
+                            <label asp-for="EsTrial" class="form-check-label" for="esTrialSwitch">
+                                Modo de prueba (Trial) — acceso limitado a un examen
+                            </label>
+                        </div>
                     </div>
 
                     <div class="d-flex gap-2">

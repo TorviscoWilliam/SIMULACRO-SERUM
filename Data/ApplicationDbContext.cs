@@ -16,6 +16,7 @@ namespace SimulacroExamen.Data
         public DbSet<Examen>            Examenes           { get; set; }
         public DbSet<PreguntaExamen>    PreguntasExamen    { get; set; }
         public DbSet<Noticia>           Noticias           { get; set; }
+        public DbSet<LogActividad>      LogsActividad      { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

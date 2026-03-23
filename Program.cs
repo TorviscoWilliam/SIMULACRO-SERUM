@@ -68,6 +68,21 @@ using (var scope = app.Services.CreateScope())
     // Migrar columnas nuevas que no existían en versiones anteriores
     MigrarEsquema(context);
 
+    // Sembrar administrador principal (SuperAdmin) – solo si no existe
+    if (!context.Usuarios.Any(u => u.NombreUsuario == "LEAO.HUACAUSI"))
+    {
+        context.Usuarios.Add(new Usuario
+        {
+            NombreUsuario = "LEAO.HUACAUSI",
+            Correo        = "leao.huacausi@simulacro.com",
+            Contrasena    = BCrypt.Net.BCrypt.HashPassword("Mender_2201"),
+            Rol           = "SuperAdmin",
+            FechaCreacion = DateTime.Now,
+            Activo        = true
+        });
+        context.SaveChanges();
+    }
+
     // Sembrar administrador por defecto (contraseña cifrada con BCrypt)
     if (!context.Usuarios.Any(u => u.Rol == "Admin"))
     {
@@ -168,6 +183,12 @@ static void MigrarEsquema(ApplicationDbContext context)
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='SessionToken')
                ALTER TABLE Usuarios ADD SessionToken NVARCHAR(36) NULL");
 
+        // Columna EsTrial para modo prueba
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='EsTrial')
+               ALTER TABLE Usuarios ADD EsTrial BIT NOT NULL DEFAULT 0");
+
         // Columna DuracionSegundos en Examenes
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
@@ -196,6 +217,19 @@ static void MigrarEsquema(ApplicationDbContext context)
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Noticias' AND COLUMN_NAME='EnlaceUrl')
                ALTER TABLE Noticias ADD EnlaceUrl NVARCHAR(1000) NULL");
+
+        // Tabla LogsActividad
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='LogsActividad')
+               CREATE TABLE LogsActividad (
+                   Id           INT IDENTITY(1,1) PRIMARY KEY,
+                   Fecha        DATETIME2        NOT NULL DEFAULT GETDATE(),
+                   AdminId      INT              NOT NULL,
+                   AdminNombre  NVARCHAR(100)    NOT NULL,
+                   Accion       NVARCHAR(100)    NOT NULL,
+                   Descripcion  NVARCHAR(500)    NOT NULL
+               )");
 
         conn.Close();
     }

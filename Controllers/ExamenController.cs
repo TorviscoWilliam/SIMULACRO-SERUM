@@ -73,6 +73,38 @@ namespace SimulacroExamen.Controllers
             ViewBag.IntentosRestantes = Math.Max(0, 5 + limiteExtra - intentosHoy);
             ViewBag.LimiteDiario      = 5 + limiteExtra;
 
+            // Estado trial
+            var usuarioData = await _db.Usuarios
+                .Where(u => u.Id == uid)
+                .Select(u => new { u.EsTrial })
+                .FirstOrDefaultAsync();
+
+            var examenesCompletados = await _db.Examenes
+                .CountAsync(e => e.UsuarioId == uid && e.Completado);
+
+            ViewBag.EsTrial            = usuarioData?.EsTrial ?? false;
+            ViewBag.ExamenesCompletados = examenesCompletados;
+            ViewBag.TrialAgotado       = (usuarioData?.EsTrial == true) && examenesCompletados >= 1;
+
+            // Últimos 10 exámenes para gráfica personal
+            var ultimos10 = await _db.Examenes
+                .Where(e => e.UsuarioId == uid && e.Completado && e.TotalPreguntas > 0 && e.FechaFin.HasValue)
+                .OrderByDescending(e => e.FechaFin)
+                .Take(10)
+                .Select(e => new
+                {
+                    Fecha      = e.FechaFin!.Value,
+                    Porcentaje = Math.Round((double)e.Puntaje / e.TotalPreguntas * 100, 1),
+                    TipoNombre = e.TipoExamen != null ? e.TipoExamen.Nombre : "General"
+                })
+                .ToListAsync();
+
+            // Reverso para que el más antiguo quede primero en la gráfica
+            ultimos10.Reverse();
+            ViewBag.GraficaFechas     = ultimos10.Select(e => e.Fecha.ToString("dd/MM")).ToList();
+            ViewBag.GraficaPorcentajes = ultimos10.Select(e => e.Porcentaje).ToList();
+            ViewBag.GraficaTipos      = ultimos10.Select(e => e.TipoNombre).ToList();
+
             return View();
         }
 
@@ -96,15 +128,33 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
+            // ── Restricciones de modo trial ──────────────────────────
+            var usuarioTrial = await _db.Usuarios
+                .Where(u => u.Id == uid)
+                .Select(u => new { u.EsTrial, u.IntentosExtra })
+                .FirstOrDefaultAsync();
+
+            if (usuarioTrial?.EsTrial == true)
+            {
+                var examenesTotal = await _db.Examenes
+                    .CountAsync(e => e.UsuarioId == uid && e.Completado);
+
+                if (examenesTotal >= 1)
+                {
+                    TempData["Error"] = "Has agotado tu examen de prueba. Contacta al administrador para obtener acceso completo.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                // Solo 20 preguntas en modo trial
+                numPreguntas = 20;
+            }
+
             // Límite de 5 exámenes por día (+ intentos extra asignados por admin)
             var hoy = DateTime.Today;
             var intentosHoy = await _db.Examenes
                 .CountAsync(e => e.UsuarioId == uid && e.FechaInicio >= hoy);
 
-            var intentosExtra = await _db.Usuarios
-                .Where(u => u.Id == uid)
-                .Select(u => u.IntentosExtra)
-                .FirstOrDefaultAsync();
+            var intentosExtra = usuarioTrial?.IntentosExtra ?? 0;
 
             if (intentosHoy >= 5 + intentosExtra)
             {
@@ -381,12 +431,18 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Examen/Noticias ──────────────────────────────────────
-        public async Task<IActionResult> Noticias()
+        public async Task<IActionResult> Noticias(int page = 1)
         {
-            var noticias = await _db.Noticias
+            const int pageSize = 6;
+            var query = _db.Noticias
                 .Include(n => n.Admin)
                 .Where(n => n.Activo)
-                .OrderByDescending(n => n.FechaPublicacion)
+                .OrderByDescending(n => n.FechaPublicacion);
+
+            var total    = await query.CountAsync();
+            var noticias = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(n => new NoticiaListaVM
                 {
                     Id               = n.Id,
@@ -400,6 +456,8 @@ namespace SimulacroExamen.Controllers
                 })
                 .ToListAsync();
 
+            ViewBag.Page       = page;
+            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
             return View(noticias);
         }
 

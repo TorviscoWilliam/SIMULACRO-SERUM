@@ -57,5 +57,10 @@ namespace SimulacroExamen.ViewModels
         [Compare(nameof(Contrasena), ErrorMessage = "Las contraseñas no coinciden")]
         [Display(Name = "Confirmar Contraseña")]
         public string ConfirmarContrasena { get; set; } = string.Empty;
+
+        // ── Tipo de examen de prueba ─────────────────────────────────
+        [Required(ErrorMessage = "Selecciona el tipo de examen que deseas probar")]
+        [Display(Name = "Tipo de Examen")]
+        public int TipoExamenId { get; set; }
     }
 }

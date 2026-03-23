@@ -1,6 +1,8 @@
 @model List<SimulacroExamen.ViewModels.NoticiaListaVM>
 @{
     ViewData["Title"] = "Noticias y Anuncios";
+    int page       = (int)ViewBag.Page;
+    int totalPages = (int)ViewBag.TotalPages;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -49,4 +51,28 @@ else
             </div>
         }
     </div>
+
+    @if (totalPages > 1)
+    {
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item @(page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="Noticias" asp-route-page="@(page - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                @for (int i = 1; i <= totalPages; i++)
+                {
+                    <li class="page-item @(i == page ? "active" : "")">
+                        <a class="page-link" asp-action="Noticias" asp-route-page="@i">@i</a>
+                    </li>
+                }
+                <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="Noticias" asp-route-page="@(page + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    }
 }

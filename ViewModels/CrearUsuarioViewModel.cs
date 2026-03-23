@@ -29,5 +29,32 @@ namespace SimulacroExamen.ViewModels
         [Required(ErrorMessage = "Seleccione un rol")]
         [Display(Name = "Rol")]
         public string Rol { get; set; } = "Usuario";
+
+        [MaxLength(100)]
+        [Display(Name = "Primer Nombre")]
+        public string? PrimerNombre { get; set; }
+
+        [MaxLength(100)]
+        [Display(Name = "Segundo Nombre")]
+        public string? SegundoNombre { get; set; }
+
+        [MaxLength(100)]
+        [Display(Name = "Primer Apellido")]
+        public string? PrimerApellido { get; set; }
+
+        [MaxLength(100)]
+        [Display(Name = "Segundo Apellido")]
+        public string? SegundoApellido { get; set; }
+
+        [MaxLength(20)]
+        [Display(Name = "Celular")]
+        public string? Celular { get; set; }
+
+        [MaxLength(20)]
+        [Display(Name = "DNI")]
+        public string? Dni { get; set; }
+
+        [Display(Name = "Modo de prueba (Trial)")]
+        public bool EsTrial { get; set; } = true;
     }
 }

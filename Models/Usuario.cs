@@ -82,6 +82,13 @@ namespace SimulacroExamen.Models
 
         [MaxLength(36)] public string? SessionToken { get; set; }
 
+        /// <summary>
+        /// Indica si el usuario está en modo de prueba (trial).
+        /// true = acceso limitado a 1 examen de 20 preguntas; requiere activación del admin.
+        /// false = acceso completo según los tipos asignados.
+        /// </summary>
+        public bool EsTrial { get; set; } = false;
+
         public string NombreCompleto =>
             string.Join(" ", new[] { PrimerNombre, SegundoNombre, PrimerApellido, SegundoApellido }
                 .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();

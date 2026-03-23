@@ -175,6 +175,26 @@
     </div>
 </div>
 
+<!-- ── Modal: alerta 5 minutos ─────────────────────────────────── -->
+<div class="modal fade" id="modalAlerta5" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 border-top border-danger border-3 shadow">
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-exclamation-triangle-fill text-danger d-block mb-3" style="font-size:3rem"></i>
+                <h5 class="fw-bold text-danger">¡Solo quedan 5 minutos!</h5>
+                <p class="text-muted mb-0">
+                    Revisa tus respuestas y envía el examen antes de que se acabe el tiempo.
+                </p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center">
+                <button type="button" class="btn btn-danger px-4" data-bs-dismiss="modal">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
     const TOTAL_PREGS  = @totalPregs;
@@ -252,11 +272,13 @@
     }
 
     // ── Temporizador regresivo ───────────────────────────────────
-    const SIN_TIEMPO   = @(sinTiempo ? "true" : "false");
-    let segundos       = @segRestantes;
-    const ALERTA_SEG   = 15 * 60;
-    let alertaMostrada = false;
-    let crono          = null;
+    const SIN_TIEMPO    = @(sinTiempo ? "true" : "false");
+    let segundos        = @segRestantes;
+    const ALERTA15_SEG  = 15 * 60;
+    const ALERTA5_SEG   = 5 * 60;
+    let alerta15Mostrada = false;
+    let alerta5Mostrada  = false;
+    let crono           = null;
 
     function formatTiempo(s) {
         return String(Math.floor(s / 60)).padStart(2,'0') + ':' +
@@ -277,16 +299,22 @@
             document.getElementById('cronometro').textContent = formatTiempo(segundos);
 
             // Alerta a 15 minutos restantes
-            if (segundos === ALERTA_SEG && !alertaMostrada) {
-                alertaMostrada = true;
+            if (segundos === ALERTA15_SEG && !alerta15Mostrada) {
+                alerta15Mostrada = true;
                 new bootstrap.Modal(document.getElementById('modalAlerta15')).show();
+            }
+
+            // Alerta a 5 minutos restantes
+            if (segundos === ALERTA5_SEG && !alerta5Mostrada) {
+                alerta5Mostrada = true;
+                new bootstrap.Modal(document.getElementById('modalAlerta5')).show();
             }
 
             // Cambiar color del temporizador
             const box = document.getElementById('timerBox');
-            if (segundos <= 300) {
+            if (segundos <= ALERTA5_SEG) {
                 box.className = 'badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6';
-            } else if (segundos <= ALERTA_SEG) {
+            } else if (segundos <= ALERTA15_SEG) {
                 box.className = 'badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fs-6';
             }
         }, 1000);

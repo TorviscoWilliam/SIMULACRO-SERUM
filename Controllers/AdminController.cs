@@ -8,9 +8,10 @@ using SimulacroExamen.ViewModels;
 
 namespace SimulacroExamen.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public class AdminController : Controller
     {
+        private bool EsSuperAdmin() => User.IsInRole("SuperAdmin");
         private readonly ApplicationDbContext _db;
         private readonly IExcelService        _excel;
         private readonly IWebHostEnvironment  _env;
@@ -175,8 +176,9 @@ namespace SimulacroExamen.Controllers
                            (u.PrimerApellido != null ? " " + u.PrimerApellido : "") +
                            (u.SegundoApellido != null ? " " + u.SegundoApellido : "")).Trim()
                         : null,
-                    Celular = u.Celular,
-                    Dni     = u.Dni
+                    Celular  = u.Celular,
+                    Dni      = u.Dni,
+                    EsTrial  = u.EsTrial
                 })
                 .ToListAsync();
 
@@ -227,8 +229,10 @@ namespace SimulacroExamen.Controllers
                 return View(vm);
             }
 
-            var rolValido = vm.Rol == "Admin" || vm.Rol == "Usuario";
-            if (!rolValido)
+            var rolesPermitidos = EsSuperAdmin()
+                ? new[] { "SuperAdmin", "Admin", "Usuario" }
+                : new[] { "Admin", "Usuario" };
+            if (!rolesPermitidos.Contains(vm.Rol))
             {
                 ModelState.AddModelError(nameof(vm.Rol), "Rol inválido");
                 return View(vm);
@@ -236,12 +240,19 @@ namespace SimulacroExamen.Controllers
 
             _db.Usuarios.Add(new Usuario
             {
-                NombreUsuario = nombreUpper,
-                Correo        = vm.Correo.Trim(),
-                Contrasena    = BCrypt.Net.BCrypt.HashPassword(vm.Contrasena),
-                Rol           = vm.Rol,
-                FechaCreacion = DateTime.Now,
-                Activo        = true
+                NombreUsuario   = nombreUpper,
+                Correo          = vm.Correo.Trim(),
+                Contrasena      = BCrypt.Net.BCrypt.HashPassword(vm.Contrasena),
+                Rol             = vm.Rol,
+                FechaCreacion   = DateTime.Now,
+                Activo          = true,
+                EsTrial         = vm.EsTrial,
+                PrimerNombre    = string.IsNullOrWhiteSpace(vm.PrimerNombre)    ? null : vm.PrimerNombre.Trim(),
+                SegundoNombre   = string.IsNullOrWhiteSpace(vm.SegundoNombre)   ? null : vm.SegundoNombre.Trim(),
+                PrimerApellido  = string.IsNullOrWhiteSpace(vm.PrimerApellido)  ? null : vm.PrimerApellido.Trim(),
+                SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim(),
+                Celular         = string.IsNullOrWhiteSpace(vm.Celular)         ? null : vm.Celular.Trim(),
+                Dni             = string.IsNullOrWhiteSpace(vm.Dni)             ? null : vm.Dni.Trim()
             });
 
             await _db.SaveChangesAsync();
@@ -254,6 +265,13 @@ namespace SimulacroExamen.Controllers
         {
             var usuario = await _db.Usuarios.FindAsync(id);
             if (usuario == null) return NotFound();
+
+            // Solo el SuperAdmin puede editar a otro SuperAdmin
+            if (usuario.Rol == "SuperAdmin" && !EsSuperAdmin())
+            {
+                TempData["Error"] = "No tienes permisos para editar al administrador principal.";
+                return RedirectToAction(nameof(Usuarios));
+            }
 
             var vm = new EditarUsuarioViewModel
             {
@@ -295,10 +313,20 @@ namespace SimulacroExamen.Controllers
                 return View(vm);
             }
 
-            if (vm.Rol != "Admin" && vm.Rol != "Usuario")
+            var rolesValidos = EsSuperAdmin()
+                ? new[] { "SuperAdmin", "Admin", "Usuario" }
+                : new[] { "Admin", "Usuario" };
+            if (!rolesValidos.Contains(vm.Rol))
             {
                 ModelState.AddModelError(nameof(vm.Rol), "Rol inválido");
                 return View(vm);
+            }
+
+            // Solo el SuperAdmin puede editar a otro SuperAdmin
+            if (usuario.Rol == "SuperAdmin" && !EsSuperAdmin())
+            {
+                TempData["Error"] = "No tienes permisos para editar al administrador principal.";
+                return RedirectToAction(nameof(Usuarios));
             }
 
             usuario.NombreUsuario   = nombreUpper;
@@ -334,6 +362,13 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Usuarios));
             }
 
+            // Solo el SuperAdmin puede desactivar a otro SuperAdmin
+            if (u.Rol == "SuperAdmin" && !EsSuperAdmin())
+            {
+                TempData["Error"] = "No tienes permisos para desactivar al administrador principal.";
+                return RedirectToAction(nameof(Usuarios));
+            }
+
             u.Activo = !u.Activo;
             await _db.SaveChangesAsync();
 
@@ -341,6 +376,63 @@ namespace SimulacroExamen.Controllers
                 ? $"Usuario '{u.NombreUsuario}' activado."
                 : $"Usuario '{u.NombreUsuario}' desactivado.";
 
+            return RedirectToAction(nameof(Usuarios));
+        }
+
+        // POST /Admin/ActivarAccesoCompleto/{id}
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ActivarAccesoCompleto(int id)
+        {
+            var u = await _db.Usuarios.FindAsync(id);
+            if (u == null) return NotFound();
+
+            u.EsTrial = false;
+            await _db.SaveChangesAsync();
+
+            await RegistrarLog("ActivarAccesoCompleto", $"Usuario '{u.NombreUsuario}' promovido de trial a acceso completo");
+            TempData["Exito"] = $"'{u.NombreUsuario}' ahora tiene acceso completo a la plataforma.";
+            return RedirectToAction(nameof(Usuarios));
+        }
+
+        // POST /Admin/ActivarTrial/{id}
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ActivarTrial(int id)
+        {
+            var u = await _db.Usuarios.FindAsync(id);
+            if (u == null) return NotFound();
+
+            u.EsTrial = true;
+            await _db.SaveChangesAsync();
+
+            await RegistrarLog("ActivarTrial", $"Usuario '{u.NombreUsuario}' revertido a modo de prueba (trial)");
+            TempData["Exito"] = $"'{u.NombreUsuario}' ha sido puesto en modo de prueba (trial).";
+            return RedirectToAction(nameof(Usuarios));
+        }
+
+        // POST /Admin/EliminarUsuario/{id}  — Solo SuperAdmin
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> EliminarUsuario(int id)
+        {
+            var u = await _db.Usuarios.FindAsync(id);
+            if (u == null) return NotFound();
+
+            var currentId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+            if (u.Id == currentId)
+            {
+                TempData["Error"] = "No puedes eliminar tu propia cuenta.";
+                return RedirectToAction(nameof(Usuarios));
+            }
+
+            var nombre = u.NombreUsuario;
+            _db.Usuarios.Remove(u);
+            await _db.SaveChangesAsync();
+
+            await RegistrarLog("EliminarUsuario", $"Usuario '{nombre}' eliminado permanentemente por el SuperAdmin");
+            TempData["Exito"] = $"Usuario '{nombre}' eliminado correctamente.";
             return RedirectToAction(nameof(Usuarios));
         }
 
@@ -856,11 +948,17 @@ namespace SimulacroExamen.Controllers
         //  NOTICIAS
         // ═══════════════════════════════════════════════════════════
 
-        public async Task<IActionResult> Noticias()
+        public async Task<IActionResult> Noticias(int page = 1)
         {
-            var noticias = await _db.Noticias
+            const int pageSize = 9;
+            var query = _db.Noticias
                 .Include(n => n.Admin)
-                .OrderByDescending(n => n.FechaPublicacion)
+                .OrderByDescending(n => n.FechaPublicacion);
+
+            var total    = await query.CountAsync();
+            var noticias = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(n => new NoticiaListaVM
                 {
                     Id               = n.Id,
@@ -874,6 +972,9 @@ namespace SimulacroExamen.Controllers
                 })
                 .ToListAsync();
 
+            ViewBag.Page       = page;
+            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
+            ViewBag.TotalItems = total;
             return View(noticias);
         }
 
@@ -1025,7 +1126,194 @@ namespace SimulacroExamen.Controllers
             await _db.SaveChangesAsync();
 
             TempData["Exito"] = "Noticia eliminada.";
+            await RegistrarLog("EliminarNoticia", $"Noticia '{n.Titulo}' eliminada");
             return RedirectToAction(nameof(Noticias));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleNoticia(int id)
+        {
+            var n = await _db.Noticias.FindAsync(id);
+            if (n == null) return NotFound();
+
+            n.Activo = !n.Activo;
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = n.Activo ? $"Noticia '{n.Titulo}' activada." : $"Noticia '{n.Titulo}' desactivada.";
+            return RedirectToAction(nameof(Noticias));
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  IMPORTACIÓN MASIVA DE USUARIOS
+        // ═══════════════════════════════════════════════════════════
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CargarUsuarios(IFormFile archivo)
+        {
+            if (archivo == null || archivo.Length == 0)
+            {
+                TempData["Error"] = "Seleccione un archivo Excel válido.";
+                return RedirectToAction(nameof(Usuarios));
+            }
+
+            const long MaxFileSize = 10 * 1024 * 1024;
+            if (archivo.Length > MaxFileSize)
+            {
+                TempData["Error"] = "El archivo supera el límite de 10 MB.";
+                return RedirectToAction(nameof(Usuarios));
+            }
+
+            var ext = Path.GetExtension(archivo.FileName).ToLowerInvariant();
+            if (ext != ".xlsx" && ext != ".xls")
+            {
+                TempData["Error"] = "Solo se permiten archivos Excel (.xlsx o .xls).";
+                return RedirectToAction(nameof(Usuarios));
+            }
+
+            List<(string Usuario, string Correo, string Contrasena, string? PrimerNombre,
+                  string? PrimerApellido, string? Celular, string? Dni)> importados;
+            try
+            {
+                using var stream = archivo.OpenReadStream();
+                importados = _excel.ImportarUsuarios(stream);
+            }
+            catch
+            {
+                TempData["Error"] = "Error al procesar el archivo. Verifique el formato.";
+                return RedirectToAction(nameof(Usuarios));
+            }
+
+            if (importados.Count == 0)
+            {
+                TempData["Error"] = "No se encontraron usuarios válidos en el archivo.";
+                return RedirectToAction(nameof(Usuarios));
+            }
+
+            int creados = 0, omitidos = 0;
+            foreach (var (usuario, correo, clave, nombre, apellido, celular, dni) in importados)
+            {
+                if (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == usuario || u.Correo == correo))
+                {
+                    omitidos++;
+                    continue;
+                }
+
+                _db.Usuarios.Add(new Usuario
+                {
+                    NombreUsuario   = usuario,
+                    Correo          = correo,
+                    Contrasena      = BCrypt.Net.BCrypt.HashPassword(clave),
+                    Rol             = "Usuario",
+                    PrimerNombre    = nombre,
+                    PrimerApellido  = apellido,
+                    Celular         = celular,
+                    Dni             = dni,
+                    FechaCreacion   = DateTime.Now,
+                    Activo          = true
+                });
+                creados++;
+            }
+
+            await _db.SaveChangesAsync();
+
+            if (omitidos > 0)
+                TempData["Advertencia"] = $"{omitidos} usuario(s) omitido(s) por usuario o correo duplicado.";
+
+            if (creados > 0)
+            {
+                TempData["Exito"] = $"Se importaron {creados} usuario(s) correctamente.";
+                await RegistrarLog("ImportarUsuarios", $"Se importaron {creados} usuario(s) desde Excel");
+            }
+            else
+                TempData["Error"] = "No se importó ningún usuario (todos eran duplicados).";
+
+            return RedirectToAction(nameof(Usuarios));
+        }
+
+        public IActionResult DescargarPlantillaUsuarios()
+        {
+            var bytes = _excel.GenerarPlantillaUsuarios();
+            return File(bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "Plantilla_Usuarios.xlsx");
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  ESTADÍSTICAS POR PREGUNTA
+        // ═══════════════════════════════════════════════════════════
+
+        public async Task<IActionResult> EstadisticasPreguntas(int? tipoId)
+        {
+            var tipos = await _db.TiposExamen.Where(t => t.Activo).OrderBy(t => t.Nombre).ToListAsync();
+            ViewBag.Tipos  = tipos;
+            ViewBag.TipoId = tipoId;
+
+            var query = _db.PreguntasExamen
+                .Include(pe => pe.Pregunta).ThenInclude(p => p!.TipoExamen)
+                .AsQueryable();
+
+            if (tipoId.HasValue)
+                query = query.Where(pe => pe.Pregunta!.TipoExamenId == tipoId.Value);
+
+            var stats = await query
+                .GroupBy(pe => new
+                {
+                    pe.PreguntaId,
+                    Texto    = pe.Pregunta!.TextoPregunta,
+                    TipoNom  = pe.Pregunta.TipoExamen != null ? pe.Pregunta.TipoExamen.Nombre : "Sin tipo"
+                })
+                .Select(g => new EstadisticaPreguntaVM
+                {
+                    PreguntaId    = g.Key.PreguntaId,
+                    TextoPregunta = g.Key.Texto,
+                    TipoNombre    = g.Key.TipoNom,
+                    TotalVeces    = g.Count(),
+                    Incorrectas   = g.Count(pe => !pe.EsCorrecta),
+                    Correctas     = g.Count(pe => pe.EsCorrecta)
+                })
+                .Where(s => s.TotalVeces >= 1)
+                .OrderByDescending(s => (double)s.Incorrectas / s.TotalVeces)
+                .Take(100)
+                .ToListAsync();
+
+            return View(stats);
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  LOGS DE ACTIVIDAD
+        // ═══════════════════════════════════════════════════════════
+
+        public async Task<IActionResult> Logs(int page = 1)
+        {
+            const int pageSize = 50;
+            var query = _db.LogsActividad.OrderByDescending(l => l.Fecha);
+            var total = await query.CountAsync();
+            var logs  = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.Page       = page;
+            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
+            ViewBag.TotalItems = total;
+            return View(logs);
+        }
+
+        // ── Helper: registrar log de actividad ────────────────────
+        private async Task RegistrarLog(string accion, string descripcion)
+        {
+            var adminId     = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+            var adminNombre = User.Identity!.Name ?? "Admin";
+            _db.LogsActividad.Add(new LogActividad
+            {
+                AdminId     = adminId,
+                AdminNombre = adminNombre,
+                Accion      = accion,
+                Descripcion = descripcion,
+                Fecha       = DateTime.Now
+            });
+            await _db.SaveChangesAsync();
         }
     }
 }

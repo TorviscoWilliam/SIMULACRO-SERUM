@@ -56,6 +56,9 @@ namespace SimulacroExamen.ViewModels
         /// <summary>DNI de 8 dígitos. Null en cuentas creadas antes de este campo.</summary>
         public string? Dni { get; set; }
 
+        /// <summary>true = usuario en modo trial (1 examen de prueba). false = acceso completo.</summary>
+        public bool EsTrial { get; set; }
+
         // ── Propiedades calculadas (no persistidas en BD) ──────────────
 
         /// <summary>

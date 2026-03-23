@@ -1,0 +1,107 @@
+@model List<SimulacroExamen.ViewModels.EstadisticaPreguntaVM>
+@{
+    ViewData["Title"] = "Estadísticas por Pregunta";
+    var tipos  = (List<SimulacroExamen.Models.TipoExamen>)ViewBag.Tipos;
+    var tipoId = (int?)ViewBag.TipoId;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0"><i class="bi bi-bar-chart-line me-2 text-warning"></i>Estadísticas por Pregunta</h2>
+        <p class="text-muted mb-0">Preguntas ordenadas por tasa de error (requieren mínimo 1 intento)</p>
+    </div>
+</div>
+
+<!-- Filtro por tipo -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+        <form method="get" asp-action="EstadisticasPreguntas" class="d-flex gap-2 align-items-center flex-wrap">
+            <select name="tipoId" class="form-select" style="max-width:300px">
+                <option value="">— Todos los tipos —</option>
+                @foreach (var t in tipos)
+                {
+                    <option value="@t.Id" selected="@(tipoId == t.Id ? "selected" : null)">@t.Nombre</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-outline-primary">
+                <i class="bi bi-funnel me-1"></i>Filtrar
+            </button>
+            @if (tipoId.HasValue)
+            {
+                <a asp-action="EstadisticasPreguntas" class="btn btn-outline-secondary">
+                    <i class="bi bi-x me-1"></i>Limpiar
+                </a>
+            }
+        </form>
+    </div>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5 text-muted">
+            <i class="bi bi-bar-chart fs-1 d-block mb-2"></i>
+            <p>No hay datos suficientes aún. Los registros aparecen conforme los usuarios completan exámenes.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>#</th>
+                        <th>Pregunta</th>
+                        <th class="text-center">Tipo</th>
+                        <th class="text-center">Intentos</th>
+                        <th class="text-center">Correctas</th>
+                        <th class="text-center">Incorrectas</th>
+                        <th class="text-center" style="min-width:160px">Tasa de error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < Model.Count; i++)
+                    {
+                        var s = Model[i];
+                        var pct = s.PorcentajeError;
+                        var colorClass = pct >= 70 ? "danger" : pct >= 40 ? "warning" : "success";
+                        <tr>
+                            <td class="text-muted small">@(i + 1)</td>
+                            <td style="max-width:420px">
+                                <span class="small">@s.TextoPregunta</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">
+                                    @s.TipoNombre
+                                </span>
+                            </td>
+                            <td class="text-center fw-bold">@s.TotalVeces</td>
+                            <td class="text-center text-success fw-bold">@s.Correctas</td>
+                            <td class="text-center text-danger fw-bold">@s.Incorrectas</td>
+                            <td class="text-center">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height:8px">
+                                        <div class="progress-bar bg-@colorClass"
+                                             style="width:@pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                                    </div>
+                                    <span class="small fw-bold text-@colorClass" style="min-width:45px">
+                                        @pct.ToString("0.0")%
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Leyenda -->
+    <div class="d-flex gap-3 mt-3 small text-muted">
+        <span><span class="badge bg-danger">≥70%</span> Muy difícil</span>
+        <span><span class="badge bg-warning text-dark">40–70%</span> Difícil</span>
+        <span><span class="badge bg-success">&lt;40%</span> Normal</span>
+    </div>
+}

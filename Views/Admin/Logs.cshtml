@@ -1,0 +1,84 @@
+@model List<SimulacroExamen.Models.LogActividad>
+@{
+    ViewData["Title"] = "Logs de Actividad";
+    int page       = (int)ViewBag.Page;
+    int totalPages = (int)ViewBag.TotalPages;
+    int totalItems = (int)ViewBag.TotalItems;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0"><i class="bi bi-journal-text me-2 text-secondary"></i>Logs de Actividad</h2>
+        <p class="text-muted mb-0">@totalItems acción(es) registrada(s)</p>
+    </div>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5 text-muted">
+            <i class="bi bi-journal fs-1 d-block mb-2"></i>
+            <p>No hay registros de actividad aún.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 small">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Administrador</th>
+                        <th>Acción</th>
+                        <th>Descripción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in Model)
+                    {
+                        <tr>
+                            <td class="text-muted text-nowrap">
+                                @log.Fecha.ToString("dd/MM/yyyy HH:mm:ss")
+                            </td>
+                            <td>
+                                <span class="fw-semibold">@log.AdminNombre</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                    @log.Accion
+                                </span>
+                            </td>
+                            <td>@log.Descripcion</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <nav class="mt-3">
+            <ul class="pagination justify-content-center">
+                <li class="page-item @(page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="Logs" asp-route-page="@(page - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                @for (int i = 1; i <= totalPages; i++)
+                {
+                    <li class="page-item @(i == page ? "active" : "")">
+                        <a class="page-link" asp-action="Logs" asp-route-page="@i">@i</a>
+                    </li>
+                }
+                <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="Logs" asp-route-page="@(page + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    }
+}

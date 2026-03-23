@@ -48,6 +48,10 @@
                             <select asp-for="Rol" class="form-select">
                                 <option value="Usuario">Estudiante</option>
                                 <option value="Admin">Administrador</option>
+                                @if (User.IsInRole("SuperAdmin"))
+                                {
+                                    <option value="SuperAdmin">Administrador Principal</option>
+                                }
                             </select>
                         </div>
                         <span asp-validation-for="Rol" class="text-danger small"></span>
