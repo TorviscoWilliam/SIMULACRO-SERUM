@@ -21,7 +21,8 @@ namespace SimulacroExamen.Controllers
         }
 
         private int UsuarioId =>
-            int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
+                ? id : throw new UnauthorizedAccessException();
 
         // ── Panel principal: muestra los tipos de examen disponibles ──
         public async Task<IActionResult> Index()

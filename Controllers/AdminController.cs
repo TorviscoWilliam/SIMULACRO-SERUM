@@ -12,6 +12,13 @@ namespace SimulacroExamen.Controllers
     public class AdminController : Controller
     {
         private bool EsSuperAdmin() => User.IsInRole("SuperAdmin");
+
+        private int CurrentUserId()
+        {
+            var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(claim, out var id) ? id : throw new UnauthorizedAccessException();
+        }
+
         private readonly ApplicationDbContext _db;
         private readonly IExcelService        _excel;
         private readonly IWebHostEnvironment  _env;
@@ -38,7 +45,7 @@ namespace SimulacroExamen.Controllers
 
             // ── Stats generales (sin filtro) ─────────────────────────
             ViewBag.TotalUsuarios  = await _db.Usuarios.CountAsync(u => u.Rol == "Usuario" && u.Activo);
-            ViewBag.TotalAdmins    = await _db.Usuarios.CountAsync(u => u.Rol == "Admin"   && u.Activo);
+            ViewBag.TotalAdmins    = await _db.Usuarios.CountAsync(u => (u.Rol == "Admin" || u.Rol == "SuperAdmin") && u.Activo);
             ViewBag.TotalPreguntas = await _db.Preguntas.CountAsync(p => p.Activo);
             ViewBag.TotalExamenes  = await _db.Examenes.CountAsync(e => e.Completado);
             ViewBag.PromedioGlobal = await _db.Examenes
@@ -355,7 +362,7 @@ namespace SimulacroExamen.Controllers
             if (u == null) return NotFound();
 
             // No permitir desactivarse a uno mismo
-            var currentId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+            var currentId = CurrentUserId();
             if (u.Id == currentId)
             {
                 TempData["Error"] = "No puedes desactivar tu propia cuenta.";
@@ -420,7 +427,7 @@ namespace SimulacroExamen.Controllers
             var u = await _db.Usuarios.FindAsync(id);
             if (u == null) return NotFound();
 
-            var currentId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+            var currentId = CurrentUserId();
             if (u.Id == currentId)
             {
                 TempData["Error"] = "No puedes eliminar tu propia cuenta.";
@@ -1016,7 +1023,7 @@ namespace SimulacroExamen.Controllers
                 imagenRuta = $"/uploads/noticias/{fileName}";
             }
 
-            var adminId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+            var adminId = CurrentUserId();
 
             _db.Noticias.Add(new Noticia
             {
@@ -1300,11 +1307,55 @@ namespace SimulacroExamen.Controllers
             return View(logs);
         }
 
+        // ── Anuncio Global (banner de mantenimiento) ─────────────
+        public async Task<IActionResult> AnuncioGlobal()
+        {
+            var anuncio = await _db.AnunciosGlobales.FirstOrDefaultAsync();
+            return View(anuncio);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AnuncioGlobal(string mensaje, string tipo, bool activo)
+        {
+            if (string.IsNullOrWhiteSpace(mensaje))
+            {
+                TempData["Error"] = "El mensaje no puede estar vacío.";
+                return RedirectToAction(nameof(AnuncioGlobal));
+            }
+
+            var anuncio = await _db.AnunciosGlobales.FirstOrDefaultAsync();
+            var adminId = CurrentUserId();
+
+            if (anuncio == null)
+            {
+                anuncio = new SimulacroExamen.Models.AnuncioGlobal
+                {
+                    AdminId = adminId
+                };
+                _db.AnunciosGlobales.Add(anuncio);
+            }
+
+            anuncio.Mensaje              = mensaje.Trim();
+            anuncio.Tipo                 = tipo;
+            anuncio.Activo               = activo;
+            anuncio.FechaActualizacion   = DateTime.Now;
+            anuncio.AdminId              = adminId;
+
+            await _db.SaveChangesAsync();
+            await RegistrarLog("Anuncio Global", $"Anuncio {(activo ? "activado" : "desactivado")}: {mensaje.Trim()[..Math.Min(80, mensaje.Trim().Length)]}");
+
+            TempData["Exito"] = activo
+                ? "Anuncio activado y visible para todos los usuarios."
+                : "Anuncio desactivado.";
+            return RedirectToAction(nameof(AnuncioGlobal));
+        }
+
         // ── Helper: registrar log de actividad ────────────────────
         private async Task RegistrarLog(string accion, string descripcion)
         {
-            var adminId     = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
-            var adminNombre = User.Identity!.Name ?? "Admin";
+            var adminId     = CurrentUserId();
+            var adminNombre = User.Identity?.Name ?? "Admin";
             _db.LogsActividad.Add(new LogActividad
             {
                 AdminId     = adminId,

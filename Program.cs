@@ -30,6 +30,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.LogoutPath        = "/Account/Logout";
         options.AccessDeniedPath  = "/Account/AccesoDenegado";
         options.Cookie.HttpOnly   = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite     = SameSiteMode.Strict;
         options.ExpireTimeSpan    = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
     });
@@ -45,6 +47,17 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// ── Cabeceras de seguridad ──────────────────────────────────────
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Frame-Options"]        = "DENY";
+    context.Response.Headers["X-Content-Type-Options"]  = "nosniff";
+    context.Response.Headers["Referrer-Policy"]         = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"]      = "camera=(), microphone=(), geolocation=()";
+    await next();
+});
+
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
@@ -217,6 +230,21 @@ static void MigrarEsquema(ApplicationDbContext context)
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Noticias' AND COLUMN_NAME='EnlaceUrl')
                ALTER TABLE Noticias ADD EnlaceUrl NVARCHAR(1000) NULL");
+
+        // Tabla AnunciosGlobales (banner de mantenimiento/anuncio global)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='AnunciosGlobales')
+               CREATE TABLE AnunciosGlobales (
+                   Id                   INT IDENTITY(1,1) PRIMARY KEY,
+                   Mensaje              NVARCHAR(500)  NOT NULL,
+                   Tipo                 NVARCHAR(20)   NOT NULL DEFAULT 'warning',
+                   Activo               BIT            NOT NULL DEFAULT 0,
+                   FechaActualizacion   DATETIME2      NOT NULL DEFAULT GETDATE(),
+                   AdminId              INT            NOT NULL,
+                   CONSTRAINT FK_AnunciosGlobales_Usuarios FOREIGN KEY (AdminId)
+                       REFERENCES Usuarios(Id) ON DELETE NO ACTION
+               )");
 
         // Tabla LogsActividad
         Exec(@"IF NOT EXISTS (

@@ -1,3 +1,4 @@
+@inject SimulacroExamen.Data.ApplicationDbContext _layoutDb
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -76,6 +77,11 @@
                             <li class="nav-item">
                                 <a class="nav-link" asp-controller="Admin" asp-action="Noticias">
                                     <i class="bi bi-megaphone me-1"></i>Noticias
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Admin" asp-action="AnuncioGlobal">
+                                    <i class="bi bi-broadcast me-1"></i>Anuncio
                                 </a>
                             </li>
                             <li class="nav-item">
@@ -167,6 +173,27 @@
                 <i class="bi bi-exclamation-circle-fill me-2"></i>
                 <span>@TempData["Advertencia"]</span>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        @{
+            // Banner de anuncio global (mantenimiento u otro aviso del admin)
+            var _anuncioGlobal = await _layoutDb.AnunciosGlobales
+                .Where(a => a.Activo)
+                .FirstOrDefaultAsync();
+        }
+        @if (_anuncioGlobal != null)
+        {
+            var iconoAnuncio = _anuncioGlobal.Tipo switch {
+                "danger"  => "bi-exclamation-octagon-fill",
+                "warning" => "bi-exclamation-triangle-fill",
+                "success" => "bi-check-circle-fill",
+                _         => "bi-info-circle-fill"
+            };
+            <div class="alert alert-@(_anuncioGlobal.Tipo) alert-dismissible d-flex align-items-center gap-3 mb-3 shadow-sm rounded-3" role="alert">
+                <i class="bi @iconoAnuncio fs-5 flex-shrink-0"></i>
+                <span class="flex-grow-1">@_anuncioGlobal.Mensaje</span>
+                <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="alert" aria-label="Cerrar"></button>
             </div>
         }
 

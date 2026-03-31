@@ -38,26 +38,45 @@
         {
             @if (trialAgotado)
             {
-                <div class="alert alert-danger d-flex align-items-start gap-3 mb-4" role="alert">
-                    <i class="bi bi-lock-fill fs-4 mt-1"></i>
-                    <div>
-                        <strong>Examen de prueba agotado</strong><br/>
-                        Ya utilizaste tu examen de prueba. Para continuar practicando,
-                        <strong>contacta al administrador</strong> y solicita tu acceso completo.
+                <div class="card border-0 shadow mb-4" style="background:linear-gradient(135deg,#dc3545 0%,#a71d2a 100%);color:#fff;">
+                    <div class="card-body py-4 px-4 d-flex align-items-center gap-4 flex-wrap">
+                        <div class="flex-shrink-0 text-center" style="min-width:60px">
+                            <i class="bi bi-lock-fill" style="font-size:3rem;opacity:.9"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="fw-bold mb-1">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                Examen de prueba agotado
+                            </h5>
+                            <p class="mb-0 opacity-90">
+                                Ya utilizaste tu examen de prueba gratuito. Para seguir practicando y acceder a todos los simulacros, <strong>adquiere un plan</strong>.
+                            </p>
+                        </div>
+                        <div class="flex-shrink-0">
+                            <button type="button" class="btn btn-light fw-bold px-4"
+                                    data-bs-toggle="modal" data-bs-target="#modalPlanes">
+                                <i class="bi bi-star-fill me-2 text-warning"></i>Ver Planes
+                            </button>
+                        </div>
                     </div>
                 </div>
             }
             else
             {
-                <div class="alert alert-warning d-flex align-items-start gap-3 mb-4" role="alert">
-                    <i class="bi bi-hourglass-split fs-4 mt-1"></i>
-                    <div>
-                        <strong>Modo de prueba</strong> — tienes acceso a
-                        <strong>1 examen de 20 preguntas</strong>
-                        (@(1 - examenesCompletados) restante(s)).<br/>
-                        <span class="small">
-                            Al finalizar tu prueba, contacta al administrador para obtener acceso completo.
-                        </span>
+                <div class="card border-0 shadow-sm mb-4" style="background:linear-gradient(135deg,#fff3cd 0%,#ffe69c 100%);border-left:5px solid #ffc107 !important;">
+                    <div class="card-body py-3 px-4 d-flex align-items-center gap-3 flex-wrap">
+                        <i class="bi bi-hourglass-split text-warning fs-3 flex-shrink-0"></i>
+                        <div class="flex-grow-1">
+                            <strong class="text-dark">Modo de prueba</strong>
+                            <span class="text-dark"> — tienes acceso a </span>
+                            <strong class="text-dark">1 examen de 20 preguntas</strong>
+                            <span class="text-muted"> (@(1 - examenesCompletados) restante(s))</span><br/>
+                            <span class="small text-muted">Al finalizar tu prueba, adquiere un plan para acceso completo.</span>
+                        </div>
+                        <button type="button" class="btn btn-warning btn-sm fw-bold flex-shrink-0"
+                                data-bs-toggle="modal" data-bs-target="#modalPlanes">
+                            <i class="bi bi-star me-1"></i>Ver Planes
+                        </button>
                     </div>
                 </div>
             }
@@ -186,6 +205,188 @@
         }
     </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════
+     Modal: Planes de suscripción (solo usuarios trial)
+     ═══════════════════════════════════════════════════════ -->
+@if (esTrial)
+{
+<div class="modal fade" id="modalPlanes" tabindex="-1" aria-labelledby="modalPlanesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg overflow-hidden">
+
+            <!-- Header con degradado -->
+            <div class="modal-header border-0 text-white py-4 px-4"
+                 style="background:linear-gradient(135deg,#6f42c1 0%,#0d6efd 100%)">
+                <div>
+                    <h4 class="modal-title fw-bold mb-1" id="modalPlanesLabel">
+                        <i class="bi bi-star-fill me-2 text-warning"></i>Elige tu Plan
+                    </h4>
+                    <p class="mb-0 opacity-75 small">Accede a todos los simulacros y mejora tu puntaje SERUMS</p>
+                </div>
+                <button type="button" class="btn-close btn-close-white ms-auto"
+                        data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+
+            <div class="modal-body p-4" style="background:#f8f5ff">
+                <div class="row g-4 justify-content-center">
+
+                    <!-- ── Plan 1: Pruebita ── -->
+                    <div class="col-lg-4 col-md-6">
+                        <div class="card h-100 border-0 shadow text-center overflow-hidden"
+                             style="border-top:5px solid #4dabf7 !important">
+                            <div class="card-header border-0 py-3"
+                                 style="background:linear-gradient(135deg,#74c0fc,#4dabf7)">
+                                <h4 class="fw-bold text-white mb-0">Pruebita</h4>
+                                <span class="badge text-white" style="background:rgba(255,255,255,.25);font-size:.8rem">PLAN MENSUAL</span>
+                            </div>
+                            <div class="card-body pt-3 pb-4 px-4">
+                                <!-- Cupo limitado -->
+                                <div class="alert alert-warning py-2 px-3 mb-3 fw-bold small">
+                                    <i class="bi bi-lightning-fill me-1"></i>
+                                    Solo para los 50 Primeros<br/>
+                                    <span class="fw-normal">¡Hasta agotar cupo!</span>
+                                </div>
+
+                                <ul class="list-unstyled text-start mb-4">
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span><strong>Acceso limitado</strong> a simulacros de examen.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span>Calculadora para estimar tu nota final.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span>Noticias y convocatorias relevantes sobre exámenes.</span>
+                                    </li>
+                                </ul>
+
+                                <div class="mb-4">
+                                    <span class="text-muted small align-top" style="font-size:.9rem">S/</span>
+                                    <span class="fw-bold" style="font-size:3.5rem;color:#4dabf7;line-height:1">8</span>
+                                    <span class="text-muted small"> mensuales</span>
+                                </div>
+
+                                <a href="https://wa.me/51936037152" class="btn w-100 fw-bold py-2 rounded-pill text-white"
+                                   style="background:linear-gradient(135deg,#74c0fc,#4dabf7)"
+                                   target="_blank">
+                                    <i class="bi bi-whatsapp me-2"></i>¡Suscribirme ya!
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Plan 2: El Aplicado ── -->
+                    <div class="col-lg-4 col-md-6">
+                        <div class="card h-100 border-0 shadow text-center overflow-hidden"
+                             style="border-top:5px solid #40c057 !important;transform:scale(1.03);">
+                            <div class="card-header border-0 py-3 position-relative"
+                                 style="background:linear-gradient(135deg,#69db7c,#40c057)">
+                                <span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-danger" style="font-size:.75rem">
+                                    <i class="bi bi-fire me-1"></i>Más popular
+                                </span>
+                                <h4 class="fw-bold text-white mb-0 mt-2">El Aplicado</h4>
+                                <span class="badge text-white" style="background:rgba(255,255,255,.25);font-size:.8rem">PLAN MENSUAL</span>
+                            </div>
+                            <div class="card-body pt-3 pb-4 px-4">
+                                <ul class="list-unstyled text-start mb-4 mt-2">
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span><strong>Acceso ilimitado</strong> a simulacros de examen.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span>Calculadora para estimar <strong>tu nota final.</strong></span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span><strong>Noticias y convocatorias</strong> relevantes sobre exámenes.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span><strong>Asistencia prioritaria</strong> y soporte más rápido.</span>
+                                    </li>
+                                </ul>
+
+                                <div class="mb-4">
+                                    <span class="text-muted small align-top" style="font-size:.9rem">S/</span>
+                                    <span class="fw-bold" style="font-size:3.5rem;color:#40c057;line-height:1">15</span>
+                                    <span class="text-muted small"> mensuales</span>
+                                </div>
+
+                                <a href="https://wa.me/51936037152" class="btn w-100 fw-bold py-2 rounded-pill text-white"
+                                   style="background:linear-gradient(135deg,#69db7c,#40c057)"
+                                   target="_blank">
+                                    <i class="bi bi-whatsapp me-2"></i>¡Suscribirme ya!
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Plan 3: Postulante Premium ── -->
+                    <div class="col-lg-4 col-md-6">
+                        <div class="card h-100 border-0 shadow text-center overflow-hidden"
+                             style="border-top:5px solid #f76707 !important">
+                            <div class="card-header border-0 py-3"
+                                 style="background:linear-gradient(135deg,#ffa94d,#f76707)">
+                                <h4 class="fw-bold text-white mb-0">Postulante Premium</h4>
+                                <span class="badge text-white" style="background:rgba(255,255,255,.25);font-size:.8rem">PLAN POR 2 MESES</span>
+                            </div>
+                            <div class="card-body pt-3 pb-4 px-4">
+                                <ul class="list-unstyled text-start mb-4 mt-2">
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span><strong>Acceso ilimitado</strong> a simulacros de examen.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span>Calculadora para estimar tu nota final.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span><strong>Noticias y convocatorias</strong> relevantes sobre exámenes.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2 mb-2">
+                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                        <span><strong>Asistencia prioritaria</strong> y soporte más rápido.</span>
+                                    </li>
+                                    <li class="d-flex align-items-start gap-2">
+                                        <i class="bi bi-check-circle-fill text-warning mt-1 flex-shrink-0"></i>
+                                        <span>Participa en <strong>sorteos exclusivos.</strong></span>
+                                    </li>
+                                </ul>
+
+                                <div class="mb-4">
+                                    <span class="text-muted small align-top" style="font-size:.9rem">S/</span>
+                                    <span class="fw-bold" style="font-size:3.5rem;color:#f76707;line-height:1">20</span>
+                                    <span class="text-muted small"> por 2 meses</span>
+                                </div>
+
+                                <a href="https://wa.me/51936037152" class="btn w-100 fw-bold py-2 rounded-pill text-white"
+                                   style="background:linear-gradient(135deg,#ffa94d,#f76707)"
+                                   target="_blank">
+                                    <i class="bi bi-whatsapp me-2"></i>¡Suscribirme ya!
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- /row -->
+            </div><!-- /modal-body -->
+
+            <div class="modal-footer border-0 justify-content-center py-3" style="background:#f0ebff">
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-shield-check text-success me-1"></i>
+                    Pago seguro · Acceso inmediato · Sin permanencia
+                </p>
+            </div>
+
+        </div>
+    </div>
+</div>
+}
 
 <!-- Modal: selección de modo de examen -->
 <div class="modal fade" id="modalModoExamen" tabindex="-1">
@@ -384,6 +585,20 @@
             seleccionarModo(parseInt(this.dataset.num));
         });
     });
+
+    // Auto-abrir modal de planes si trial agotado (una vez por sesión)
+    @if (trialAgotado)
+    {
+        <text>
+    if (!sessionStorage.getItem('planesModalMostrado')) {
+        sessionStorage.setItem('planesModalMostrado', '1');
+        setTimeout(function () {
+            var modal = new bootstrap.Modal(document.getElementById('modalPlanes'));
+            modal.show();
+        }, 800);
+    }
+        </text>
+    }
 </script>
 }
 

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
 using SimulacroExamen.ViewModels;
+using System.Collections.Concurrent;
 using System.Security.Claims;
 
 namespace SimulacroExamen.Controllers
@@ -12,6 +13,11 @@ namespace SimulacroExamen.Controllers
     public class AccountController : Controller
     {
         private readonly ApplicationDbContext _db;
+
+        // ── Protección anti fuerza bruta (en memoria) ─────────────
+        private static readonly ConcurrentDictionary<string, (int intentos, DateTime bloqueoHasta)> _loginIntentos = new();
+        private const int MaxIntentos = 5;
+        private static readonly TimeSpan DuracionBloqueo = TimeSpan.FromMinutes(15);
 
         public AccountController(ApplicationDbContext db) => _db = db;
 
@@ -33,6 +39,15 @@ namespace SimulacroExamen.Controllers
             if (!ModelState.IsValid)
                 return View(vm);
 
+            // ── Rate-limit por IP ──────────────────────────────────────
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            if (_loginIntentos.TryGetValue(ip, out var info) && info.bloqueoHasta > DateTime.UtcNow)
+            {
+                var restante = (int)(info.bloqueoHasta - DateTime.UtcNow).TotalMinutes + 1;
+                ModelState.AddModelError("", $"Demasiados intentos fallidos. Intente de nuevo en {restante} minuto(s).");
+                return View(vm);
+            }
+
             // Búsqueda case-insensitive: todos los nombres nuevos son uppercase
             var nombreBusqueda = vm.NombreUsuario.Trim().ToUpperInvariant();
             var usuario = await _db.Usuarios
@@ -40,9 +55,20 @@ namespace SimulacroExamen.Controllers
 
             if (usuario == null || !BCrypt.Net.BCrypt.Verify(vm.Contrasena, usuario.Contrasena))
             {
+                // Incrementar contador de intentos fallidos
+                var intentos = _loginIntentos.AddOrUpdate(ip,
+                    _ => (1, DateTime.MinValue),
+                    (_, prev) => (prev.intentos + 1, prev.bloqueoHasta));
+
+                if (intentos.intentos >= MaxIntentos)
+                    _loginIntentos[ip] = (intentos.intentos, DateTime.UtcNow.Add(DuracionBloqueo));
+
                 ModelState.AddModelError("", "Usuario o contraseña incorrectos");
                 return View(vm);
             }
+
+            // Login exitoso → limpiar intentos
+            _loginIntentos.TryRemove(ip, out _);
 
             // Generar token de sesión único → invalida cualquier sesión anterior
             var sessionToken = Guid.NewGuid().ToString();
