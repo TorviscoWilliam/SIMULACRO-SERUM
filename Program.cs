@@ -219,6 +219,19 @@ static void MigrarEsquema(ApplicationDbContext context)
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='PasswordResetExpiry')
                ALTER TABLE Usuarios ADD PasswordResetExpiry DATETIME2 NULL");
 
+        // Columnas para verificación de email
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='EmailVerificado')
+               ALTER TABLE Usuarios ADD EmailVerificado BIT NOT NULL DEFAULT 0");
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='EmailVerificacionToken')
+               ALTER TABLE Usuarios ADD EmailVerificacionToken NVARCHAR(100) NULL");
+        // Usuarios existentes se marcan como verificados para no interrumpir acceso
+        Exec(@"UPDATE Usuarios SET EmailVerificado = 1 WHERE EmailVerificado = 0 AND FechaCreacion < GETDATE()");
+
+
         // Columna DuracionSegundos en Examenes
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS

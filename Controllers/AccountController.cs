@@ -219,21 +219,25 @@ namespace SimulacroExamen.Controllers
                 }
             }
 
+            var tokenVerificacion = Guid.NewGuid().ToString("N");
+
             var nuevoUsuario = new Usuario
             {
-                NombreUsuario   = nombreUpper,
-                Correo          = vm.Correo.Trim(),
-                Contrasena      = BCrypt.Net.BCrypt.HashPassword(vm.Contrasena),
-                Rol             = "Usuario",
-                FechaCreacion   = DateTime.Now,
-                Activo          = true,
-                EsTrial         = true,
-                PrimerNombre    = vm.PrimerNombre.Trim().ToUpperInvariant(),
-                SegundoNombre   = string.IsNullOrWhiteSpace(vm.SegundoNombre) ? null : vm.SegundoNombre.Trim().ToUpperInvariant(),
-                PrimerApellido  = vm.PrimerApellido.Trim().ToUpperInvariant(),
-                SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim().ToUpperInvariant(),
-                Celular         = vm.Celular.Trim(),
-                Dni             = vm.Dni.Trim()
+                NombreUsuario          = nombreUpper,
+                Correo                 = vm.Correo.Trim(),
+                Contrasena             = BCrypt.Net.BCrypt.HashPassword(vm.Contrasena),
+                Rol                    = "Usuario",
+                FechaCreacion          = DateTime.Now,
+                Activo                 = true,
+                EsTrial                = true,
+                EmailVerificado        = true,
+                EmailVerificacionToken = null,
+                PrimerNombre           = vm.PrimerNombre.Trim().ToUpperInvariant(),
+                SegundoNombre          = string.IsNullOrWhiteSpace(vm.SegundoNombre) ? null : vm.SegundoNombre.Trim().ToUpperInvariant(),
+                PrimerApellido         = vm.PrimerApellido.Trim().ToUpperInvariant(),
+                SegundoApellido        = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim().ToUpperInvariant(),
+                Celular                = vm.Celular.Trim(),
+                Dni                    = vm.Dni.Trim()
             };
 
             _db.Usuarios.Add(nuevoUsuario);
@@ -248,8 +252,34 @@ namespace SimulacroExamen.Controllers
             });
             await _db.SaveChangesAsync();
 
-            TempData["Exito"] = $"Cuenta creada exitosamente. Tienes 1 examen de prueba de {tipoExamen.Nombre}. Inicia sesión.";
-            return RedirectToAction(nameof(Login));
+            // Enviar email de verificación
+            var linkVerificacion = Url.Action("VerificarEmail", "Account",
+                new { token = tokenVerificacion }, Request.Scheme);
+
+            var cuerpoVerif = $@"
+<div style='font-family:Inter,sans-serif;max-width:520px;margin:auto;padding:24px'>
+  <h2 style='color:#0d6efd'>Simulacro SERUMS</h2>
+  <p>Hola <strong>{nuevoUsuario.NombreUsuario}</strong>, ¡bienvenido!</p>
+  <p>Gracias por registrarte. Solo falta un paso: verifica tu correo electrónico.</p>
+  <p style='text-align:center;margin:32px 0'>
+    <a href='{linkVerificacion}'
+       style='background:#198754;color:#fff;padding:14px 28px;
+              border-radius:8px;text-decoration:none;font-weight:bold'>
+      ✓ Verificar mi correo
+    </a>
+  </p>
+  <p style='color:#666;font-size:.9rem'>
+    Si no creaste esta cuenta, puedes ignorar este mensaje.
+  </p>
+  <hr style='border:none;border-top:1px solid #eee;margin:24px 0'/>
+  <p style='color:#999;font-size:.8rem'>© {DateTime.Now.Year} Simulacro SERUMS</p>
+</div>";
+
+            try { await _email.EnviarAsync(nuevoUsuario.Correo, "Verifica tu correo – Simulacro SERUMS", cuerpoVerif); }
+            catch { /* No bloquear registro si el email falla */ }
+
+            TempData["CorreoEnviado"] = nuevoUsuario.Correo;
+            return RedirectToAction(nameof(VerificacionPendiente));
         }
 
         // ── GET /Account/Logout ──────────────────────────────────────
@@ -377,6 +407,80 @@ namespace SimulacroExamen.Controllers
 
             TempData["Exito"] = "Contraseña restablecida correctamente. Inicia sesión.";
             return RedirectToAction(nameof(Login));
+        }
+
+        // ── GET /Account/VerificacionPendiente ───────────────────────
+        [HttpGet]
+        public IActionResult VerificacionPendiente()
+        {
+            ViewBag.Correo = TempData["CorreoEnviado"] as string;
+            return View();
+        }
+
+        // ── GET /Account/VerificarEmail?token=... ────────────────────
+        [HttpGet]
+        public async Task<IActionResult> VerificarEmail(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return RedirectToAction(nameof(Login));
+
+            var usuario = await _db.Usuarios
+                .FirstOrDefaultAsync(u => u.EmailVerificacionToken == token);
+
+            if (usuario == null)
+            {
+                TempData["Error"] = "El enlace de verificación es inválido o ya fue usado.";
+                return RedirectToAction(nameof(Login));
+            }
+
+            usuario.EmailVerificado        = true;
+            usuario.EmailVerificacionToken = null;
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = "¡Correo verificado! Ya puedes iniciar sesión.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        // ── POST /Account/ReenviarVerificacion ───────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReenviarVerificacion(string correo)
+        {
+            var usuario = await _db.Usuarios
+                .FirstOrDefaultAsync(u => u.Correo == correo.Trim() && !u.EmailVerificado);
+
+            if (usuario != null)
+            {
+                // Regenerar token
+                var token = Guid.NewGuid().ToString("N");
+                usuario.EmailVerificacionToken = token;
+                await _db.SaveChangesAsync();
+
+                var link = Url.Action("VerificarEmail", "Account", new { token }, Request.Scheme);
+
+                var cuerpo = $@"
+<div style='font-family:Inter,sans-serif;max-width:520px;margin:auto;padding:24px'>
+  <h2 style='color:#0d6efd'>Simulacro SERUMS</h2>
+  <p>Hola <strong>{usuario.NombreUsuario}</strong>,</p>
+  <p>Aquí tienes tu nuevo enlace de verificación:</p>
+  <p style='text-align:center;margin:32px 0'>
+    <a href='{link}'
+       style='background:#198754;color:#fff;padding:14px 28px;
+              border-radius:8px;text-decoration:none;font-weight:bold'>
+      ✓ Verificar mi correo
+    </a>
+  </p>
+  <hr style='border:none;border-top:1px solid #eee;margin:24px 0'/>
+  <p style='color:#999;font-size:.8rem'>© {DateTime.Now.Year} Simulacro SERUMS</p>
+</div>";
+
+                try { await _email.EnviarAsync(usuario.Correo, "Verifica tu correo – Simulacro SERUMS", cuerpo); }
+                catch { /* No exponer errores SMTP */ }
+            }
+
+            TempData["CorreoEnviado"] = correo;
+            TempData["Reenviado"]     = true;
+            return RedirectToAction(nameof(VerificacionPendiente));
         }
 
         private IActionResult RedirectToRol()

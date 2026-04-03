@@ -102,6 +102,14 @@ namespace SimulacroExamen.Models
         /// <summary>Fecha/hora en que expira el token de reset.</summary>
         public DateTime? PasswordResetExpiry { get; set; }
 
+        /// <summary>Indica si el usuario verificó su correo electrónico.</summary>
+        public bool EmailVerificado { get; set; } = false;
+
+        /// <summary>Token único enviado al correo para verificar la cuenta.</summary>
+        [MaxLength(100)]
+        public string? EmailVerificacionToken { get; set; }
+
+
         public string NombreCompleto =>
             string.Join(" ", new[] { PrimerNombre, SegundoNombre, PrimerApellido, SegundoApellido }
                 .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();

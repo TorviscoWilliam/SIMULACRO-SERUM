@@ -334,7 +334,12 @@
                                         <span class="text-muted small"> @plan.TextoPrecio</span>
                                     </div>
 
-                                    <a href="@plan.EnlaceBoton"
+                                    @{
+                                        var mensaje = $"Hola, me interesa el {plan.Nombre} de S/{plan.Precio.ToString("0")} {plan.TextoPrecio}. ¿Cómo puedo adquirirlo?";
+                                        var baseUrl = plan.EnlaceBoton.Contains("wa.me") ? plan.EnlaceBoton.Split('?')[0] : plan.EnlaceBoton;
+                                        var urlConMensaje = $"{baseUrl}?text={Uri.EscapeDataString(mensaje)}";
+                                    }
+                                    <a href="@urlConMensaje"
                                        class="btn w-100 fw-bold py-2 rounded-pill text-white"
                                        style="background:linear-gradient(135deg,@plan.ColorPrimario,@plan.ColorSecundario)"
                                        target="_blank" rel="noopener noreferrer">
