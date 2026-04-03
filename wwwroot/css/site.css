@@ -173,3 +173,38 @@ footer {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Modo oscuro: sobreescribir clases Bootstrap con colores fijos ── */
+[data-bs-theme="dark"] .bg-white,
+[data-bs-theme="dark"] .card-header.bg-white,
+[data-bs-theme="dark"] .card-footer.bg-white {
+    background-color: var(--bs-card-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+[data-bs-theme="dark"] .bg-light,
+[data-bs-theme="dark"] .card-header.bg-light,
+[data-bs-theme="dark"] .card-footer.bg-light {
+    background-color: var(--bs-tertiary-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+[data-bs-theme="dark"] .badge.bg-light {
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color) !important;
+    border-color: var(--bs-border-color) !important;
+}
+
+/* Modal body/footer con colores hardcodeados */
+[data-bs-theme="dark"] .modal-body,
+[data-bs-theme="dark"] .modal-footer,
+[data-bs-theme="dark"] .modal-content {
+    background-color: var(--bs-modal-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+/* Footer layout */
+[data-bs-theme="dark"] footer.footer {
+    background-color: var(--bs-tertiary-bg) !important;
+    border-color: var(--bs-border-color) !important;
+}
