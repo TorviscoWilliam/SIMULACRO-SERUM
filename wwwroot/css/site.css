@@ -5,7 +5,7 @@
 /* ── Tipografía y base ───────────────────────────────────── */
 body {
     font-family: 'Inter', sans-serif;
-    background-color: #f0f2f5;
+    background-color: var(--bs-tertiary-bg);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -60,7 +60,7 @@ main { flex: 1; }
 
 /* ── Examen: tarjetas de preguntas ───────────────────────── */
 .pregunta-card {
-    border-left: 4px solid #dee2e6;
+    border-left: 4px solid var(--bs-border-color);
     transition: border-color .2s;
 }
 
@@ -80,14 +80,14 @@ main { flex: 1; }
 }
 
 .alternativa-label:hover {
-    background-color: #e8f0fe;
-    border-color: #c6d9fb;
+    background-color: var(--bs-primary-bg-subtle);
+    border-color: var(--bs-primary-border-subtle);
 }
 
 .alternativa-label.seleccionada {
-    background-color: #dbeafe;
-    border-color: #3b82f6;
-    color: #1e40af;
+    background-color: var(--bs-primary-bg-subtle);
+    border-color: var(--bs-primary);
+    color: var(--bs-primary-text-emphasis);
     font-weight: 600;
 }
 
@@ -121,8 +121,8 @@ main { flex: 1; }
 }
 
 .accordion-button:not(.collapsed) {
-    background-color: #eff6ff;
-    color: #1d4ed8;
+    background-color: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary-text-emphasis);
 }
 
 /* ── Formularios ─────────────────────────────────────────── */
@@ -150,6 +150,13 @@ main { flex: 1; }
 /* ── Resultado: tarjetas correctas/incorrectas ───────────── */
 .border-start.border-success { border-color: #198754 !important; }
 .border-start.border-danger  { border-color: #dc3545 !important; }
+
+/* ── Footer ──────────────────────────────────────────────── */
+footer {
+    background-color: var(--bs-tertiary-bg) !important;
+    border-color: var(--bs-border-color) !important;
+    color: var(--bs-secondary-color) !important;
+}
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 576px) {
