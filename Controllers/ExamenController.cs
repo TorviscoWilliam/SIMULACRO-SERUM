@@ -74,18 +74,29 @@ namespace SimulacroExamen.Controllers
             ViewBag.IntentosRestantes = Math.Max(0, 5 + limiteExtra - intentosHoy);
             ViewBag.LimiteDiario      = 5 + limiteExtra;
 
-            // Estado trial
+            // Estado trial y suscripción
             var usuarioData = await _db.Usuarios
                 .Where(u => u.Id == uid)
-                .Select(u => new { u.EsTrial })
+                .Select(u => new { u.EsTrial, u.FechaVencimiento })
                 .FirstOrDefaultAsync();
 
             var examenesCompletados = await _db.Examenes
                 .CountAsync(e => e.UsuarioId == uid && e.Completado);
 
-            ViewBag.EsTrial            = usuarioData?.EsTrial ?? false;
+            bool esTrial    = usuarioData?.EsTrial ?? false;
+            var  fechaVenc  = usuarioData?.FechaVencimiento;
+            bool vencida    = !esTrial && fechaVenc.HasValue && fechaVenc.Value < DateTime.Now;
+            int  diasRestantes = (!esTrial && fechaVenc.HasValue && fechaVenc.Value >= DateTime.Now)
+                                 ? (int)Math.Ceiling((fechaVenc.Value - DateTime.Now).TotalDays)
+                                 : 0;
+
+            ViewBag.EsTrial             = esTrial;
             ViewBag.ExamenesCompletados = examenesCompletados;
-            ViewBag.TrialAgotado       = (usuarioData?.EsTrial == true) && examenesCompletados >= 1;
+            ViewBag.TrialAgotado        = esTrial && examenesCompletados >= 1;
+            ViewBag.SuscripcionVencida  = vencida;
+            ViewBag.FechaVencimiento    = fechaVenc;
+            ViewBag.DiasRestantes       = diasRestantes;
+            ViewBag.ProximoAVencer      = !esTrial && !vencida && diasRestantes > 0 && diasRestantes <= 7;
 
             // Últimos 10 exámenes para gráfica personal
             var ultimos10 = await _db.Examenes
@@ -105,6 +116,12 @@ namespace SimulacroExamen.Controllers
             ViewBag.GraficaFechas     = ultimos10.Select(e => e.Fecha.ToString("dd/MM")).ToList();
             ViewBag.GraficaPorcentajes = ultimos10.Select(e => e.Porcentaje).ToList();
             ViewBag.GraficaTipos      = ultimos10.Select(e => e.TipoNombre).ToList();
+
+            // Planes de suscripción para el modal trial
+            ViewBag.PlanesSuscripcion = await _db.PlanesSuscripcion
+                .Where(p => p.Activo)
+                .OrderBy(p => p.Orden)
+                .ToListAsync();
 
             return View();
         }
@@ -129,11 +146,20 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // ── Restricciones de modo trial ──────────────────────────
+            // ── Restricciones de modo trial y suscripción vencida ───
             var usuarioTrial = await _db.Usuarios
                 .Where(u => u.Id == uid)
-                .Select(u => new { u.EsTrial, u.IntentosExtra })
+                .Select(u => new { u.EsTrial, u.IntentosExtra, u.FechaVencimiento })
                 .FirstOrDefaultAsync();
+
+            // Bloquear si la suscripción está vencida
+            if (usuarioTrial?.EsTrial == false
+                && usuarioTrial.FechaVencimiento.HasValue
+                && usuarioTrial.FechaVencimiento.Value < DateTime.Now)
+            {
+                TempData["Error"] = "Tu suscripción ha vencido. Renuévala para continuar practicando.";
+                return RedirectToAction(nameof(Index));
+            }
 
             if (usuarioTrial?.EsTrial == true)
             {
@@ -472,6 +498,43 @@ namespace SimulacroExamen.Controllers
                 .ToListAsync();
 
             return View(examenes);
+        }
+
+        // ── GET /Examen/Sugerencias ───────────────────────────────────
+        public async Task<IActionResult> Sugerencias()
+        {
+            var uid = UsuarioId;
+            var mis = await _db.Sugerencias
+                .Where(s => s.UsuarioId == uid)
+                .OrderByDescending(s => s.FechaEnvio)
+                .ToListAsync();
+            ViewBag.MisSugerencias = mis;
+            return View();
+        }
+
+        // ── POST /Examen/Sugerencias ──────────────────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Sugerencias(string asunto, string mensaje)
+        {
+            if (string.IsNullOrWhiteSpace(asunto) || string.IsNullOrWhiteSpace(mensaje))
+            {
+                TempData["Error"] = "El asunto y el mensaje son obligatorios.";
+                return RedirectToAction(nameof(Sugerencias));
+            }
+
+            _db.Sugerencias.Add(new Sugerencia
+            {
+                UsuarioId  = UsuarioId,
+                Asunto     = asunto.Trim()[..Math.Min(100, asunto.Trim().Length)],
+                Mensaje    = mensaje.Trim()[..Math.Min(2000, mensaje.Trim().Length)],
+                FechaEnvio = DateTime.Now,
+                Leida      = false
+            });
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = "¡Gracias! Tu sugerencia fue enviada correctamente.";
+            return RedirectToAction(nameof(Sugerencias));
         }
     }
 }

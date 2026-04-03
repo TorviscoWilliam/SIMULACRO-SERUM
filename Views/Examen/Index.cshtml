@@ -3,6 +3,7 @@
     var totalExamenes     = (int)ViewBag.TotalExamenes;
     var mejorPuntaje      = (double)ViewBag.MejorPuntaje;
     var tiposAcceso       = (List<SimulacroExamen.Models.TipoExamen>)ViewBag.TiposAcceso;
+    var planesSuscripcion = (List<SimulacroExamen.Models.PlanSuscripcion>)(ViewBag.PlanesSuscripcion ?? new List<SimulacroExamen.Models.PlanSuscripcion>());
     var pregsPorTipo      = (Dictionary<int, int>)ViewBag.PreguntasPorTipo;
     var intentosHoy       = (int)ViewBag.IntentosHoy;
     var intentosRest      = (int)ViewBag.IntentosRestantes;
@@ -12,6 +13,10 @@
     bool esTrial          = (bool)(ViewBag.EsTrial ?? false);
     bool trialAgotado     = (bool)(ViewBag.TrialAgotado ?? false);
     int examenesCompletados = (int)(ViewBag.ExamenesCompletados ?? 0);
+    bool suscripcionVencida = (bool)(ViewBag.SuscripcionVencida ?? false);
+    int  diasRestantes      = (int)(ViewBag.DiasRestantes ?? 0);
+    bool proximoAVencer     = (bool)(ViewBag.ProximoAVencer ?? false);
+    var  fechaVencimiento   = ViewBag.FechaVencimiento as DateTime?;
 }
 
 <div class="row justify-content-center">
@@ -80,6 +85,55 @@
                     </div>
                 </div>
             }
+        }
+
+        <!-- Banner suscripción vencida -->
+        @if (suscripcionVencida)
+        {
+            <div class="card border-0 shadow mb-4" style="background:linear-gradient(135deg,#dc3545 0%,#a71d2a 100%);color:#fff;">
+                <div class="card-body py-4 px-4 d-flex align-items-center gap-4 flex-wrap">
+                    <div class="flex-shrink-0 text-center" style="min-width:60px">
+                        <i class="bi bi-calendar-x-fill" style="font-size:3rem;opacity:.9"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="fw-bold mb-1">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            Suscripción vencida
+                        </h5>
+                        <p class="mb-0 opacity-90">
+                            Tu suscripción venció el <strong>@fechaVencimiento?.ToString("dd/MM/yyyy")</strong>.
+                            Renuévala para seguir practicando con acceso completo.
+                        </p>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <button type="button" class="btn btn-light fw-bold px-4"
+                                data-bs-toggle="modal" data-bs-target="#modalPlanes">
+                            <i class="bi bi-arrow-repeat me-2 text-danger"></i>Renovar Plan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Banner próximo a vencer -->
+        @if (proximoAVencer)
+        {
+            <div class="card border-0 shadow-sm mb-4" style="background:linear-gradient(135deg,#fff3cd 0%,#ffe69c 100%);border-left:5px solid #ffc107 !important;">
+                <div class="card-body py-3 px-4 d-flex align-items-center gap-3 flex-wrap">
+                    <i class="bi bi-calendar-warning-fill text-warning fs-3 flex-shrink-0"></i>
+                    <div class="flex-grow-1">
+                        <strong class="text-dark">Suscripción por vencer</strong>
+                        <span class="text-dark"> — tu plan vence en </span>
+                        <strong class="text-danger">@diasRestantes día(s)</strong>
+                        <span class="text-muted"> (@fechaVencimiento?.ToString("dd/MM/yyyy"))</span><br/>
+                        <span class="small text-muted">Renueva pronto para no perder el acceso.</span>
+                    </div>
+                    <button type="button" class="btn btn-warning btn-sm fw-bold flex-shrink-0"
+                            data-bs-toggle="modal" data-bs-target="#modalPlanes">
+                        <i class="bi bi-arrow-repeat me-1"></i>Renovar
+                    </button>
+                </div>
+            </div>
         }
 
         <!-- Estadísticas -->
@@ -207,15 +261,14 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
-     Modal: Planes de suscripción (solo usuarios trial)
+     Modal: Planes de suscripción (dinámico desde BD)
      ═══════════════════════════════════════════════════════ -->
-@if (esTrial)
+@if (esTrial && planesSuscripcion.Any())
 {
 <div class="modal fade" id="modalPlanes" tabindex="-1" aria-labelledby="modalPlanesLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg overflow-hidden">
 
-            <!-- Header con degradado -->
             <div class="modal-header border-0 text-white py-4 px-4"
                  style="background:linear-gradient(135deg,#6f42c1 0%,#0d6efd 100%)">
                 <div>
@@ -231,150 +284,69 @@
             <div class="modal-body p-4" style="background:#f8f5ff">
                 <div class="row g-4 justify-content-center">
 
-                    <!-- ── Plan 1: Pruebita ── -->
-                    <div class="col-lg-4 col-md-6">
-                        <div class="card h-100 border-0 shadow text-center overflow-hidden"
-                             style="border-top:5px solid #4dabf7 !important">
-                            <div class="card-header border-0 py-3"
-                                 style="background:linear-gradient(135deg,#74c0fc,#4dabf7)">
-                                <h4 class="fw-bold text-white mb-0">Pruebita</h4>
-                                <span class="badge text-white" style="background:rgba(255,255,255,.25);font-size:.8rem">PLAN MENSUAL</span>
-                            </div>
-                            <div class="card-body pt-3 pb-4 px-4">
-                                <!-- Cupo limitado -->
-                                <div class="alert alert-warning py-2 px-3 mb-3 fw-bold small">
-                                    <i class="bi bi-lightning-fill me-1"></i>
-                                    Solo para los 50 Primeros<br/>
-                                    <span class="fw-normal">¡Hasta agotar cupo!</span>
+                    @foreach (var plan in planesSuscripcion)
+                    {
+                        var colSize = planesSuscripcion.Count == 1 ? "col-md-8 col-lg-6"
+                                    : planesSuscripcion.Count == 2 ? "col-md-6 col-lg-5"
+                                    : "col-lg-4 col-md-6";
+                        var cardScale = plan.EsPopular ? "transform:scale(1.03);" : "";
+                        <div class="@colSize">
+                            <div class="card h-100 border-0 shadow text-center overflow-hidden"
+                                 style="border-top:5px solid @plan.ColorSecundario !important;@cardScale">
+                                <div class="card-header border-0 py-3 position-relative"
+                                     style="background:linear-gradient(135deg,@plan.ColorPrimario,@plan.ColorSecundario)">
+                                    @if (plan.EsPopular)
+                                    {
+                                        <span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-danger"
+                                              style="font-size:.75rem">
+                                            <i class="bi bi-fire me-1"></i>Más popular
+                                        </span>
+                                    }
+                                    <h4 class="fw-bold text-white mb-0 @(plan.EsPopular ? "mt-2" : "")">@plan.Nombre</h4>
+                                    <span class="badge text-white"
+                                          style="background:rgba(255,255,255,.25);font-size:.8rem">@plan.Etiqueta</span>
                                 </div>
+                                <div class="card-body pt-3 pb-4 px-4">
 
-                                <ul class="list-unstyled text-start mb-4">
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span><strong>Acceso limitado</strong> a simulacros de examen.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span>Calculadora para estimar tu nota final.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span>Noticias y convocatorias relevantes sobre exámenes.</span>
-                                    </li>
-                                </ul>
+                                    @if (!string.IsNullOrEmpty(plan.TextoBadge))
+                                    {
+                                        <div class="alert alert-warning py-2 px-3 mb-3 fw-bold small">
+                                            <i class="bi bi-lightning-fill me-1"></i>
+                                            @plan.TextoBadge
+                                        </div>
+                                    }
 
-                                <div class="mb-4">
-                                    <span class="text-muted small align-top" style="font-size:.9rem">S/</span>
-                                    <span class="fw-bold" style="font-size:3.5rem;color:#4dabf7;line-height:1">8</span>
-                                    <span class="text-muted small"> mensuales</span>
+                                    <ul class="list-unstyled text-start mb-4 @(plan.EsPopular ? "mt-2" : "")">
+                                        @foreach (var feat in (plan.Caracteristicas ?? "").Split('\n').Where(f => !string.IsNullOrWhiteSpace(f)))
+                                        {
+                                            <li class="d-flex align-items-start gap-2 mb-2">
+                                                <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                                <span>@Html.Raw(System.Text.RegularExpressions.Regex.Replace(feat.Trim(), @"\*\*(.+?)\*\*", "<strong>$1</strong>"))</span>
+                                            </li>
+                                        }
+                                    </ul>
+
+                                    <div class="mb-4">
+                                        <span class="text-muted small align-top" style="font-size:.9rem">S/</span>
+                                        <span class="fw-bold" style="font-size:3.5rem;color:@plan.ColorSecundario;line-height:1">
+                                            @plan.Precio.ToString("0")
+                                        </span>
+                                        <span class="text-muted small"> @plan.TextoPrecio</span>
+                                    </div>
+
+                                    <a href="@plan.EnlaceBoton"
+                                       class="btn w-100 fw-bold py-2 rounded-pill text-white"
+                                       style="background:linear-gradient(135deg,@plan.ColorPrimario,@plan.ColorSecundario)"
+                                       target="_blank" rel="noopener noreferrer">
+                                        <i class="bi bi-whatsapp me-2"></i>@plan.TextoBoton
+                                    </a>
                                 </div>
-
-                                <a href="https://wa.me/51936037152" class="btn w-100 fw-bold py-2 rounded-pill text-white"
-                                   style="background:linear-gradient(135deg,#74c0fc,#4dabf7)"
-                                   target="_blank">
-                                    <i class="bi bi-whatsapp me-2"></i>¡Suscribirme ya!
-                                </a>
                             </div>
                         </div>
-                    </div>
+                    }
 
-                    <!-- ── Plan 2: El Aplicado ── -->
-                    <div class="col-lg-4 col-md-6">
-                        <div class="card h-100 border-0 shadow text-center overflow-hidden"
-                             style="border-top:5px solid #40c057 !important;transform:scale(1.03);">
-                            <div class="card-header border-0 py-3 position-relative"
-                                 style="background:linear-gradient(135deg,#69db7c,#40c057)">
-                                <span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-danger" style="font-size:.75rem">
-                                    <i class="bi bi-fire me-1"></i>Más popular
-                                </span>
-                                <h4 class="fw-bold text-white mb-0 mt-2">El Aplicado</h4>
-                                <span class="badge text-white" style="background:rgba(255,255,255,.25);font-size:.8rem">PLAN MENSUAL</span>
-                            </div>
-                            <div class="card-body pt-3 pb-4 px-4">
-                                <ul class="list-unstyled text-start mb-4 mt-2">
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span><strong>Acceso ilimitado</strong> a simulacros de examen.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span>Calculadora para estimar <strong>tu nota final.</strong></span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span><strong>Noticias y convocatorias</strong> relevantes sobre exámenes.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span><strong>Asistencia prioritaria</strong> y soporte más rápido.</span>
-                                    </li>
-                                </ul>
-
-                                <div class="mb-4">
-                                    <span class="text-muted small align-top" style="font-size:.9rem">S/</span>
-                                    <span class="fw-bold" style="font-size:3.5rem;color:#40c057;line-height:1">15</span>
-                                    <span class="text-muted small"> mensuales</span>
-                                </div>
-
-                                <a href="https://wa.me/51936037152" class="btn w-100 fw-bold py-2 rounded-pill text-white"
-                                   style="background:linear-gradient(135deg,#69db7c,#40c057)"
-                                   target="_blank">
-                                    <i class="bi bi-whatsapp me-2"></i>¡Suscribirme ya!
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ── Plan 3: Postulante Premium ── -->
-                    <div class="col-lg-4 col-md-6">
-                        <div class="card h-100 border-0 shadow text-center overflow-hidden"
-                             style="border-top:5px solid #f76707 !important">
-                            <div class="card-header border-0 py-3"
-                                 style="background:linear-gradient(135deg,#ffa94d,#f76707)">
-                                <h4 class="fw-bold text-white mb-0">Postulante Premium</h4>
-                                <span class="badge text-white" style="background:rgba(255,255,255,.25);font-size:.8rem">PLAN POR 2 MESES</span>
-                            </div>
-                            <div class="card-body pt-3 pb-4 px-4">
-                                <ul class="list-unstyled text-start mb-4 mt-2">
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span><strong>Acceso ilimitado</strong> a simulacros de examen.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span>Calculadora para estimar tu nota final.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span><strong>Noticias y convocatorias</strong> relevantes sobre exámenes.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2 mb-2">
-                                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                        <span><strong>Asistencia prioritaria</strong> y soporte más rápido.</span>
-                                    </li>
-                                    <li class="d-flex align-items-start gap-2">
-                                        <i class="bi bi-check-circle-fill text-warning mt-1 flex-shrink-0"></i>
-                                        <span>Participa en <strong>sorteos exclusivos.</strong></span>
-                                    </li>
-                                </ul>
-
-                                <div class="mb-4">
-                                    <span class="text-muted small align-top" style="font-size:.9rem">S/</span>
-                                    <span class="fw-bold" style="font-size:3.5rem;color:#f76707;line-height:1">20</span>
-                                    <span class="text-muted small"> por 2 meses</span>
-                                </div>
-
-                                <a href="https://wa.me/51936037152" class="btn w-100 fw-bold py-2 rounded-pill text-white"
-                                   style="background:linear-gradient(135deg,#ffa94d,#f76707)"
-                                   target="_blank">
-                                    <i class="bi bi-whatsapp me-2"></i>¡Suscribirme ya!
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                </div><!-- /row -->
-            </div><!-- /modal-body -->
+                </div>
+            </div>
 
             <div class="modal-footer border-0 justify-content-center py-3" style="background:#f0ebff">
                 <p class="text-muted small mb-0">
@@ -382,7 +354,6 @@
                     Pago seguro · Acceso inmediato · Sin permanencia
                 </p>
             </div>
-
         </div>
     </div>
 </div>

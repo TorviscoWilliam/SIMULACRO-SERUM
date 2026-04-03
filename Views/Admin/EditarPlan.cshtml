@@ -1,0 +1,46 @@
+@model SimulacroExamen.Models.PlanSuscripcion
+@{
+    ViewData["Title"] = $"Editar Plan — {Model.Nombre}";
+}
+
+<div class="d-flex align-items-center gap-3 mb-4">
+    <a asp-action="Planes" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+    <div>
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-pencil-square me-2 text-warning"></i>Editar Plan
+        </h2>
+        <p class="text-muted mb-0">@Model.Nombre</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Formulario -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form asp-action="EditarPlan" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="Id" value="@Model.Id"/>
+                    <input type="hidden" name="FechaCreacion" value="@Model.FechaCreacion.ToString("o")"/>
+                    @await Html.PartialAsync("_PlanForm", Model)
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-warning px-4">
+                            <i class="bi bi-save me-2"></i>Guardar cambios
+                        </button>
+                        <a asp-action="Planes" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- Vista previa -->
+    <div class="col-lg-5">
+        @await Html.PartialAsync("_PlanPreview", Model)
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/js/plan-form.js" asp-append-version="true"></script>
+}

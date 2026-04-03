@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
+using SimulacroExamen.Services;
 using SimulacroExamen.ViewModels;
 using System.Collections.Concurrent;
 using System.Security.Claims;
@@ -13,13 +14,18 @@ namespace SimulacroExamen.Controllers
     public class AccountController : Controller
     {
         private readonly ApplicationDbContext _db;
+        private readonly IEmailService        _email;
 
         // ── Protección anti fuerza bruta (en memoria) ─────────────
         private static readonly ConcurrentDictionary<string, (int intentos, DateTime bloqueoHasta)> _loginIntentos = new();
         private const int MaxIntentos = 5;
         private static readonly TimeSpan DuracionBloqueo = TimeSpan.FromMinutes(15);
 
-        public AccountController(ApplicationDbContext db) => _db = db;
+        public AccountController(ApplicationDbContext db, IEmailService email)
+        {
+            _db    = db;
+            _email = email;
+        }
 
         // ── GET /Account/Login ───────────────────────────────────────
         [HttpGet]
@@ -255,6 +261,123 @@ namespace SimulacroExamen.Controllers
 
         // ── GET /Account/AccesoDenegado ──────────────────────────────
         public IActionResult AccesoDenegado() => View();
+
+        // ── GET /Account/OlvideMiContrasena ──────────────────────────
+        [HttpGet]
+        public IActionResult OlvideMiContrasena() => View();
+
+        // ── POST /Account/OlvideMiContrasena ─────────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> OlvideMiContrasena(string correo)
+        {
+            if (string.IsNullOrWhiteSpace(correo))
+            {
+                ModelState.AddModelError("", "Ingresa tu correo electrónico.");
+                return View();
+            }
+
+            var usuario = await _db.Usuarios
+                .FirstOrDefaultAsync(u => u.Correo == correo.Trim() && u.Activo);
+
+            // Siempre mostrar el mismo mensaje (no revelar si el correo existe)
+            TempData["Exito"] = "Si el correo está registrado, recibirás un enlace en breve.";
+
+            if (usuario != null)
+            {
+                var token  = Guid.NewGuid().ToString("N");
+                usuario.PasswordResetToken  = token;
+                usuario.PasswordResetExpiry = DateTime.Now.AddHours(1);
+                await _db.SaveChangesAsync();
+
+                var link = Url.Action("ResetearContrasena", "Account",
+                    new { token }, Request.Scheme);
+
+                var cuerpo = $@"
+<div style='font-family:Inter,sans-serif;max-width:520px;margin:auto;padding:24px'>
+  <h2 style='color:#0d6efd'>Simulacro SERUMS</h2>
+  <p>Hola <strong>{usuario.NombreUsuario}</strong>,</p>
+  <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+  <p style='text-align:center;margin:32px 0'>
+    <a href='{link}'
+       style='background:#0d6efd;color:#fff;padding:14px 28px;
+              border-radius:8px;text-decoration:none;font-weight:bold'>
+      Restablecer contraseña
+    </a>
+  </p>
+  <p style='color:#666;font-size:.9rem'>
+    Este enlace expira en <strong>1 hora</strong>. Si no solicitaste esto, ignora este mensaje.
+  </p>
+  <hr style='border:none;border-top:1px solid #eee;margin:24px 0'/>
+  <p style='color:#999;font-size:.8rem'>© {DateTime.Now.Year} Simulacro SERUMS</p>
+</div>";
+
+                try { await _email.EnviarAsync(usuario.Correo, "Restablecer contraseña – Simulacro SERUMS", cuerpo); }
+                catch { /* No exponer errores de SMTP al usuario */ }
+            }
+
+            return RedirectToAction(nameof(Login));
+        }
+
+        // ── GET /Account/ResetearContrasena ──────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> ResetearContrasena(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return RedirectToAction(nameof(Login));
+
+            var usuario = await _db.Usuarios
+                .FirstOrDefaultAsync(u => u.PasswordResetToken == token
+                                       && u.PasswordResetExpiry > DateTime.Now);
+
+            if (usuario == null)
+            {
+                TempData["Error"] = "El enlace es inválido o ya expiró. Solicita uno nuevo.";
+                return RedirectToAction(nameof(OlvideMiContrasena));
+            }
+
+            ViewBag.Token = token;
+            return View();
+        }
+
+        // ── POST /Account/ResetearContrasena ─────────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResetearContrasena(string token, string nuevaContrasena, string confirmar)
+        {
+            ViewBag.Token = token;
+
+            if (string.IsNullOrWhiteSpace(nuevaContrasena) || nuevaContrasena.Length < 6)
+            {
+                ModelState.AddModelError("", "La contraseña debe tener al menos 6 caracteres.");
+                return View();
+            }
+            if (nuevaContrasena != confirmar)
+            {
+                ModelState.AddModelError("", "Las contraseñas no coinciden.");
+                return View();
+            }
+
+            var usuario = await _db.Usuarios
+                .FirstOrDefaultAsync(u => u.PasswordResetToken == token
+                                       && u.PasswordResetExpiry > DateTime.Now);
+
+            if (usuario == null)
+            {
+                TempData["Error"] = "El enlace es inválido o ya expiró.";
+                return RedirectToAction(nameof(OlvideMiContrasena));
+            }
+
+            usuario.Contrasena          = BCrypt.Net.BCrypt.HashPassword(nuevaContrasena);
+            usuario.PasswordResetToken  = null;
+            usuario.PasswordResetExpiry = null;
+            // Invalidar sesión activa
+            usuario.SessionToken = null;
+            await _db.SaveChangesAsync();
+
+            TempData["Exito"] = "Contraseña restablecida correctamente. Inicia sesión.";
+            return RedirectToAction(nameof(Login));
+        }
 
         private IActionResult RedirectToRol()
         {

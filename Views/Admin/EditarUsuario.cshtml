@@ -103,6 +103,23 @@
                     </div>
 
                     <hr class="my-3" />
+                    <p class="fw-semibold text-muted small mb-2 text-uppercase">
+                        <i class="bi bi-calendar-check me-1"></i>Suscripción
+                    </p>
+                    <div class="mb-3">
+                        <label asp-for="FechaVencimiento" class="form-label fw-semibold small"></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
+                            <input asp-for="FechaVencimiento" type="date" class="form-control"
+                                   value="@(Model.FechaVencimiento.HasValue ? Model.FechaVencimiento.Value.ToString("yyyy-MM-dd") : "")" />
+                        </div>
+                        <div class="form-text text-muted">
+                            Deja vacío para suscripción sin fecha de vencimiento.
+                            Establece una fecha para controlar el acceso automáticamente.
+                        </div>
+                    </div>
+
+                    <hr class="my-3" />
                     <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Cambio de contraseña opcional — dejar vacío para conservar la actual.</p>
 
                     <div class="mb-3">

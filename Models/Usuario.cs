@@ -89,6 +89,19 @@ namespace SimulacroExamen.Models
         /// </summary>
         public bool EsTrial { get; set; } = false;
 
+        /// <summary>
+        /// Fecha de vencimiento de la suscripción.
+        /// null = acceso indefinido. Si es pasada y EsTrial=false → suscripción vencida.
+        /// </summary>
+        public DateTime? FechaVencimiento { get; set; }
+
+        /// <summary>Token único para restablecer contraseña (expira en 1 hora).</summary>
+        [MaxLength(100)]
+        public string? PasswordResetToken { get; set; }
+
+        /// <summary>Fecha/hora en que expira el token de reset.</summary>
+        public DateTime? PasswordResetExpiry { get; set; }
+
         public string NombreCompleto =>
             string.Join(" ", new[] { PrimerNombre, SegundoNombre, PrimerApellido, SegundoApellido }
                 .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();

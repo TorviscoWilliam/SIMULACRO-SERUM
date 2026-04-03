@@ -1,0 +1,129 @@
+@{
+    ViewData["Title"] = "Sugerencias";
+    var misSugerencias = (List<SimulacroExamen.Models.Sugerencia>)(ViewBag.MisSugerencias
+                          ?? new List<SimulacroExamen.Models.Sugerencia>());
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+
+        <!-- Encabezado -->
+        <div class="card border-0 shadow-sm mb-4"
+             style="background:linear-gradient(135deg,#6f42c1 0%,#0d6efd 100%);color:#fff">
+            <div class="card-body py-4 px-4 d-flex align-items-center gap-4">
+                <i class="bi bi-chat-heart-fill" style="font-size:3.5rem;opacity:.9"></i>
+                <div>
+                    <h3 class="fw-bold mb-1">¿Tienes alguna sugerencia?</h3>
+                    <p class="mb-0 opacity-75">
+                        Tu opinión nos ayuda a mejorar. Cuéntanos qué podemos hacer mejor,
+                        qué te gustaría ver o cualquier problema que hayas encontrado.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulario -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-pencil-square me-2 text-primary"></i>Enviar sugerencia
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Sugerencias" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            Asunto <span class="text-danger">*</span>
+                        </label>
+                        <input name="asunto" class="form-control" maxlength="100" required
+                               placeholder="Ej: Agregar más preguntas de Medicina"/>
+                        <div class="form-text">Máximo 100 caracteres.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            Mensaje <span class="text-danger">*</span>
+                        </label>
+                        <textarea name="mensaje" class="form-control" rows="5"
+                                  maxlength="2000" required
+                                  placeholder="Describe tu sugerencia con el mayor detalle posible..."></textarea>
+                        <div class="form-text d-flex justify-content-between">
+                            <span>Sé específico, eso nos ayuda a entender mejor tu idea.</span>
+                            <span id="msgCount">0 / 2000</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="bi bi-send-fill me-2"></i>Enviar sugerencia
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Historial de sugerencias propias -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-clock-history me-2 text-secondary"></i>Mis sugerencias anteriores
+                </h5>
+                <span class="badge bg-secondary">@misSugerencias.Count enviada(s)</span>
+            </div>
+            <div class="card-body p-0">
+                @if (!misSugerencias.Any())
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-2 opacity-50"></i>
+                        <p class="mb-0">Aún no has enviado ninguna sugerencia.</p>
+                    </div>
+                }
+                else
+                {
+                    <ul class="list-group list-group-flush">
+                        @foreach (var s in misSugerencias)
+                        {
+                            <li class="list-group-item px-4 py-3">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-semibold">@s.Asunto</div>
+                                        <p class="text-muted small mb-1"
+                                           style="white-space:pre-wrap;max-height:80px;overflow:hidden">@s.Mensaje</p>
+                                        <span class="text-muted" style="font-size:.78rem">
+                                            <i class="bi bi-calendar3 me-1"></i>@s.FechaEnvio.ToString("dd/MM/yyyy 'a las' HH:mm")
+                                        </span>
+                                    </div>
+                                    <div class="flex-shrink-0 text-end">
+                                        @if (s.Leida)
+                                        {
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check2-circle me-1"></i>Revisada
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="bi bi-hourglass-split me-1"></i>Pendiente
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    var ta = document.querySelector('textarea[name="mensaje"]');
+    var cnt = document.getElementById('msgCount');
+    ta.addEventListener('input', function () {
+        cnt.textContent = this.value.length + ' / 2000';
+    });
+</script>
+}

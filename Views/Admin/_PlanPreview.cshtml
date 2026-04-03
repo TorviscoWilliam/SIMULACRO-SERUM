@@ -1,0 +1,84 @@
+@model SimulacroExamen.Models.PlanSuscripcion
+@{
+    var color1 = string.IsNullOrEmpty(Model.ColorPrimario) ? "#74c0fc" : Model.ColorPrimario;
+    var color2 = string.IsNullOrEmpty(Model.ColorSecundario) ? "#4dabf7" : Model.ColorSecundario;
+}
+
+<div class="sticky-top" style="top:80px">
+    <p class="text-muted small fw-semibold mb-2">
+        <i class="bi bi-eye me-1"></i>Vista previa en tiempo real:
+    </p>
+
+    <div id="planPreviewCard" class="card border-0 shadow text-center overflow-hidden"
+         style="border-top: 5px solid @color2 !important; max-width: 340px; margin: 0 auto;">
+
+        <div id="previewHeader" class="card-header border-0 py-3 text-white"
+             style="background: linear-gradient(135deg, @color1, @color2)">
+            @if (Model.EsPopular)
+            {
+                <div class="position-relative" style="height:18px">
+                    <span id="previewPopularBadge"
+                          class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-danger"
+                          style="font-size:.7rem;white-space:nowrap">
+                        <i class="bi bi-fire me-1"></i>Más popular
+                    </span>
+                </div>
+            }
+            else
+            {
+                <div id="previewPopularBadge" style="display:none;height:18px">
+                    <span class="position-absolute badge rounded-pill bg-danger" style="font-size:.7rem">
+                        <i class="bi bi-fire me-1"></i>Más popular
+                    </span>
+                </div>
+            }
+            <h5 id="previewNombreCard" class="fw-bold text-white mb-0 mt-1">@(Model.Nombre.Length > 0 ? Model.Nombre : "Nombre del plan")</h5>
+            <small id="previewEtiquetaCard" class="opacity-75">@(Model.Etiqueta.Length > 0 ? Model.Etiqueta : "ETIQUETA")</small>
+        </div>
+
+        <div class="card-body pt-3 pb-4 px-3">
+            @if (!string.IsNullOrEmpty(Model.TextoBadge))
+            {
+                <div id="previewBadgeBox" class="alert alert-warning py-1 px-2 mb-2 small fw-bold">
+                    <i class="bi bi-lightning-fill me-1"></i>
+                    <span id="previewBadgeText">@Model.TextoBadge</span>
+                </div>
+            }
+            else
+            {
+                <div id="previewBadgeBox" class="alert alert-warning py-1 px-2 mb-2 small fw-bold" style="display:none">
+                    <i class="bi bi-lightning-fill me-1"></i>
+                    <span id="previewBadgeText"></span>
+                </div>
+            }
+
+            <ul id="previewFeaturesList" class="list-unstyled text-start mb-3 small">
+                @foreach (var feat in (Model.Caracteristicas ?? "").Split('\n').Where(f => !string.IsNullOrWhiteSpace(f)))
+                {
+                    <li class="d-flex align-items-start gap-2 mb-1">
+                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                        <span>@Html.Raw(System.Text.RegularExpressions.Regex.Replace(feat.Trim(), @"\*\*(.+?)\*\*", "<strong>$1</strong>"))</span>
+                    </li>
+                }
+            </ul>
+
+            <div class="mb-3">
+                <span class="text-muted small">S/</span>
+                <span id="previewPrecioCard" class="fw-bold"
+                      style="font-size:2.5rem;line-height:1;color:@color2">@(Model.Precio > 0 ? Model.Precio.ToString("0") : "0")</span>
+                <span id="previewTextoPrecioCard" class="text-muted small"> @Model.TextoPrecio</span>
+            </div>
+
+            <a href="#" class="btn w-100 fw-bold py-2 rounded-pill text-white btn-sm"
+               id="previewBoton"
+               style="background: linear-gradient(135deg, @color1, @color2)">
+                <i class="bi bi-whatsapp me-1"></i>
+                <span id="previewTextoBotonCard">@(string.IsNullOrEmpty(Model.TextoBoton) ? "¡Suscribirme ya!" : Model.TextoBoton)</span>
+            </a>
+        </div>
+    </div>
+
+    <p class="text-muted text-center small mt-2 fst-italic">
+        La vista previa se actualiza al escribir
+    </p>
+</div>

@@ -183,9 +183,10 @@ namespace SimulacroExamen.Controllers
                            (u.PrimerApellido != null ? " " + u.PrimerApellido : "") +
                            (u.SegundoApellido != null ? " " + u.SegundoApellido : "")).Trim()
                         : null,
-                    Celular  = u.Celular,
-                    Dni      = u.Dni,
-                    EsTrial  = u.EsTrial
+                    Celular          = u.Celular,
+                    Dni              = u.Dni,
+                    EsTrial          = u.EsTrial,
+                    FechaVencimiento = u.FechaVencimiento
                 })
                 .ToListAsync();
 
@@ -282,16 +283,17 @@ namespace SimulacroExamen.Controllers
 
             var vm = new EditarUsuarioViewModel
             {
-                Id             = usuario.Id,
-                NombreUsuario  = usuario.NombreUsuario,
-                Correo         = usuario.Correo,
-                Rol            = usuario.Rol,
-                PrimerNombre   = usuario.PrimerNombre,
-                SegundoNombre  = usuario.SegundoNombre,
-                PrimerApellido = usuario.PrimerApellido,
+                Id              = usuario.Id,
+                NombreUsuario   = usuario.NombreUsuario,
+                Correo          = usuario.Correo,
+                Rol             = usuario.Rol,
+                PrimerNombre    = usuario.PrimerNombre,
+                SegundoNombre   = usuario.SegundoNombre,
+                PrimerApellido  = usuario.PrimerApellido,
                 SegundoApellido = usuario.SegundoApellido,
-                Celular        = usuario.Celular,
-                Dni            = usuario.Dni
+                Celular         = usuario.Celular,
+                Dni             = usuario.Dni,
+                FechaVencimiento = usuario.FechaVencimiento
             };
             return View(vm);
         }
@@ -343,8 +345,9 @@ namespace SimulacroExamen.Controllers
             usuario.SegundoNombre   = string.IsNullOrWhiteSpace(vm.SegundoNombre)   ? null : vm.SegundoNombre.Trim().ToUpperInvariant();
             usuario.PrimerApellido  = string.IsNullOrWhiteSpace(vm.PrimerApellido)  ? null : vm.PrimerApellido.Trim().ToUpperInvariant();
             usuario.SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim().ToUpperInvariant();
-            usuario.Celular         = string.IsNullOrWhiteSpace(vm.Celular) ? null : vm.Celular.Trim();
-            usuario.Dni             = string.IsNullOrWhiteSpace(vm.Dni)    ? null : vm.Dni.Trim();
+            usuario.Celular          = string.IsNullOrWhiteSpace(vm.Celular) ? null : vm.Celular.Trim();
+            usuario.Dni              = string.IsNullOrWhiteSpace(vm.Dni)    ? null : vm.Dni.Trim();
+            usuario.FechaVencimiento = vm.FechaVencimiento;
 
             if (!string.IsNullOrWhiteSpace(vm.ContrasenaNueva))
                 usuario.Contrasena = BCrypt.Net.BCrypt.HashPassword(vm.ContrasenaNueva);
@@ -395,10 +398,13 @@ namespace SimulacroExamen.Controllers
             if (u == null) return NotFound();
 
             u.EsTrial = false;
+            // Si no tiene fecha de vencimiento asignada, establecer 30 días por defecto
+            if (u.FechaVencimiento == null || u.FechaVencimiento < DateTime.Now)
+                u.FechaVencimiento = DateTime.Now.AddDays(30);
             await _db.SaveChangesAsync();
 
-            await RegistrarLog("ActivarAccesoCompleto", $"Usuario '{u.NombreUsuario}' promovido de trial a acceso completo");
-            TempData["Exito"] = $"'{u.NombreUsuario}' ahora tiene acceso completo a la plataforma.";
+            await RegistrarLog("ActivarAccesoCompleto", $"Usuario '{u.NombreUsuario}' promovido de trial a acceso completo (vence {u.FechaVencimiento:dd/MM/yyyy})");
+            TempData["Exito"] = $"'{u.NombreUsuario}' ahora tiene acceso completo hasta el {u.FechaVencimiento:dd/MM/yyyy}.";
             return RedirectToAction(nameof(Usuarios));
         }
 
@@ -459,7 +465,9 @@ namespace SimulacroExamen.Controllers
                     MejorPuntaje  = u.Examenes.Any(e => e.Completado)
                         ? u.Examenes.Where(e => e.Completado).Max(e => e.Puntaje)
                         : 0,
-                    TiposAsignados = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList()
+                    TiposAsignados   = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList(),
+                    EsTrial          = u.EsTrial,
+                    FechaVencimiento = u.FechaVencimiento
                 })
                 .ToListAsync();
 
@@ -1305,6 +1313,160 @@ namespace SimulacroExamen.Controllers
             ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
             ViewBag.TotalItems = total;
             return View(logs);
+        }
+
+        // ── Sugerencias de usuarios ───────────────────────────────
+        public async Task<IActionResult> Sugerencias(int page = 1, string filtro = "todas")
+        {
+            const int pageSize = 10;
+            var query = _db.Sugerencias
+                .Include(s => s.Usuario)
+                .AsQueryable();
+
+            if (filtro == "nuevas")
+                query = query.Where(s => !s.Leida);
+            else if (filtro == "leidas")
+                query = query.Where(s => s.Leida);
+
+            var total     = await query.CountAsync();
+            var items     = await query
+                .OrderByDescending(s => s.FechaEnvio)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.Page        = page;
+            ViewBag.TotalPages  = (int)Math.Ceiling(total / (double)pageSize);
+            ViewBag.TotalItems  = total;
+            ViewBag.Filtro      = filtro;
+            ViewBag.TotalNuevas = await _db.Sugerencias.CountAsync(s => !s.Leida);
+            return View(items);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> MarcarSugerenciaLeida(int id)
+        {
+            var s = await _db.Sugerencias.FindAsync(id);
+            if (s == null) return NotFound();
+            s.Leida = !s.Leida;
+            await _db.SaveChangesAsync();
+            return RedirectToAction(nameof(Sugerencias));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EliminarSugerencia(int id)
+        {
+            var s = await _db.Sugerencias.FindAsync(id);
+            if (s == null) return NotFound();
+            _db.Sugerencias.Remove(s);
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = "Sugerencia eliminada.";
+            return RedirectToAction(nameof(Sugerencias));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> MarcarTodasLeidas()
+        {
+            var nuevas = await _db.Sugerencias.Where(s => !s.Leida).ToListAsync();
+            nuevas.ForEach(s => s.Leida = true);
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = $"{nuevas.Count} sugerencia(s) marcadas como leídas.";
+            return RedirectToAction(nameof(Sugerencias));
+        }
+
+        // ── Planes de suscripción (tarjetas modal trial) ──────────
+        public async Task<IActionResult> Planes()
+        {
+            var planes = await _db.PlanesSuscripcion
+                .OrderBy(p => p.Orden)
+                .ToListAsync();
+            return View(planes);
+        }
+
+        public IActionResult CrearPlan() => View(new PlanSuscripcion
+        {
+            EnlaceBoton = "https://wa.me/51936037152",
+            TextoBoton  = "¡Suscribirme ya!",
+            Activo      = true
+        });
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CrearPlan(PlanSuscripcion plan)
+        {
+            if (!ModelState.IsValid) return View(plan);
+            plan.FechaCreacion = DateTime.Now;
+            _db.PlanesSuscripcion.Add(plan);
+            await _db.SaveChangesAsync();
+            await RegistrarLog("Crear Plan", $"Plan creado: {plan.Nombre}");
+            TempData["Exito"] = $"Plan \"{plan.Nombre}\" creado correctamente.";
+            return RedirectToAction(nameof(Planes));
+        }
+
+        public async Task<IActionResult> EditarPlan(int id)
+        {
+            var plan = await _db.PlanesSuscripcion.FindAsync(id);
+            if (plan == null) return NotFound();
+            return View(plan);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditarPlan(PlanSuscripcion plan)
+        {
+            if (!ModelState.IsValid) return View(plan);
+            var existing = await _db.PlanesSuscripcion.FindAsync(plan.Id);
+            if (existing == null) return NotFound();
+
+            existing.Nombre          = plan.Nombre;
+            existing.Etiqueta        = plan.Etiqueta;
+            existing.Precio          = plan.Precio;
+            existing.TextoPrecio     = plan.TextoPrecio;
+            existing.ColorPrimario   = plan.ColorPrimario;
+            existing.ColorSecundario = plan.ColorSecundario;
+            existing.EsPopular       = plan.EsPopular;
+            existing.TextoBadge      = plan.TextoBadge;
+            existing.Caracteristicas = plan.Caracteristicas;
+            existing.EnlaceBoton     = plan.EnlaceBoton;
+            existing.TextoBoton      = plan.TextoBoton;
+            existing.Activo          = plan.Activo;
+            existing.Orden           = plan.Orden;
+
+            await _db.SaveChangesAsync();
+            await RegistrarLog("Editar Plan", $"Plan editado: {plan.Nombre}");
+            TempData["Exito"] = $"Plan \"{plan.Nombre}\" actualizado correctamente.";
+            return RedirectToAction(nameof(Planes));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EliminarPlan(int id)
+        {
+            var plan = await _db.PlanesSuscripcion.FindAsync(id);
+            if (plan == null) return NotFound();
+            var nombre = plan.Nombre;
+            _db.PlanesSuscripcion.Remove(plan);
+            await _db.SaveChangesAsync();
+            await RegistrarLog("Eliminar Plan", $"Plan eliminado: {nombre}");
+            TempData["Exito"] = $"Plan \"{nombre}\" eliminado.";
+            return RedirectToAction(nameof(Planes));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> TogglePlan(int id)
+        {
+            var plan = await _db.PlanesSuscripcion.FindAsync(id);
+            if (plan == null) return NotFound();
+            plan.Activo = !plan.Activo;
+            await _db.SaveChangesAsync();
+            TempData["Exito"] = plan.Activo
+                ? $"Plan \"{plan.Nombre}\" activado."
+                : $"Plan \"{plan.Nombre}\" desactivado.";
+            return RedirectToAction(nameof(Planes));
         }
 
         // ── Anuncio Global (banner de mantenimiento) ─────────────

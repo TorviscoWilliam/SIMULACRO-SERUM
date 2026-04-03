@@ -1,0 +1,139 @@
+@model List<SimulacroExamen.Models.PlanSuscripcion>
+@{
+    ViewData["Title"] = "Planes de Suscripción";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-star-fill me-2 text-warning"></i>Planes de Suscripción
+        </h2>
+        <p class="text-muted mb-0">Gestiona las tarjetas del modal de planes para usuarios de prueba</p>
+    </div>
+    <a asp-action="CrearPlan" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Nuevo Plan
+    </a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5 text-muted">
+            <i class="bi bi-star fs-1 d-block mb-2"></i>
+            <p>Aún no hay planes creados.</p>
+            <a asp-action="CrearPlan" class="btn btn-primary">Crear primer plan</a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        @foreach (var p in Model)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm h-100 @(p.Activo ? "" : "opacity-50")"
+                     style="border-top: 4px solid @p.ColorSecundario !important;">
+
+                    <!-- Header con degradado del plan -->
+                    <div class="card-header border-0 py-3 text-white text-center"
+                         style="background: linear-gradient(135deg, @p.ColorPrimario, @p.ColorSecundario)">
+                        <h5 class="fw-bold mb-0">@p.Nombre</h5>
+                        <small class="opacity-75">@p.Etiqueta</small>
+                        @if (p.EsPopular)
+                        {
+                            <br/><span class="badge bg-danger mt-1">
+                                <i class="bi bi-fire me-1"></i>Más popular
+                            </span>
+                        }
+                    </div>
+
+                    <div class="card-body d-flex flex-column">
+                        <!-- Precio -->
+                        <div class="text-center mb-3">
+                            <span class="text-muted small">S/</span>
+                            <span class="fw-bold fs-2" style="color:@p.ColorSecundario">@p.Precio.ToString("0")</span>
+                            <span class="text-muted small"> @p.TextoPrecio</span>
+                        </div>
+
+                        <!-- Badge especial -->
+                        @if (!string.IsNullOrEmpty(p.TextoBadge))
+                        {
+                            <div class="alert alert-warning py-1 px-2 small text-center mb-2">
+                                <i class="bi bi-lightning-fill me-1"></i>@p.TextoBadge
+                            </div>
+                        }
+
+                        <!-- Características (máx 3 líneas preview) -->
+                        <ul class="list-unstyled small text-muted flex-grow-1 mb-2">
+                            @foreach (var feat in (p.Caracteristicas ?? "").Split('\n').Take(3).Where(f => !string.IsNullOrWhiteSpace(f)))
+                            {
+                                <li class="d-flex gap-2">
+                                    <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                                    <span>@feat.Replace("**", "")</span>
+                                </li>
+                            }
+                            @{
+                                var total = (p.Caracteristicas ?? "").Split('\n').Count(f => !string.IsNullOrWhiteSpace(f));
+                                if (total > 3)
+                                {
+                                    <li class="text-muted fst-italic small">+ @(total - 3) más...</li>
+                                }
+                            }
+                        </ul>
+
+                        <!-- Estado -->
+                        <div class="text-center mb-2">
+                            @if (p.Activo)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-eye me-1"></i>Visible</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary"><i class="bi bi-eye-slash me-1"></i>Oculto</span>
+                            }
+                            <span class="badge bg-light text-dark border ms-1">Orden: @p.Orden</span>
+                        </div>
+                    </div>
+
+                    <div class="card-footer bg-white d-flex justify-content-end gap-2 flex-wrap">
+                        <a asp-action="EditarPlan" asp-route-id="@p.Id"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-pencil me-1"></i>Editar
+                        </a>
+                        <form asp-action="TogglePlan" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@p.Id"/>
+                            <button type="submit"
+                                    class="btn btn-sm @(p.Activo ? "btn-outline-warning" : "btn-outline-success")">
+                                @if (p.Activo)
+                                {
+                                    <i class="bi bi-eye-slash me-1"></i><text>Ocultar</text>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-eye me-1"></i><text>Mostrar</text>
+                                }
+                            </button>
+                        </form>
+                        <form asp-action="EliminarPlan" method="post"
+                              onsubmit="return confirm('¿Eliminar el plan «@p.Nombre»? Esta acción no se puede deshacer.')">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@p.Id"/>
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash me-1"></i>Eliminar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="alert alert-info d-flex gap-2 mt-4 small">
+        <i class="bi bi-info-circle-fill flex-shrink-0 mt-1"></i>
+        <span>
+            Los planes activos aparecen en el modal de "Ver Planes" que ven los usuarios de prueba.
+            Usa el campo <strong>Orden</strong> para controlar en qué posición aparece cada tarjeta (menor = primero).
+        </span>
+    </div>
+}

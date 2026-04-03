@@ -31,6 +31,9 @@ namespace SimulacroExamen.ViewModels
         [Display(Name = "DNI")]
         public string? Dni { get; set; }
 
+        [Display(Name = "Fecha de Vencimiento")]
+        public DateTime? FechaVencimiento { get; set; }
+
         [DataType(DataType.Password)]
         [MinLength(6, ErrorMessage = "Mínimo 6 caracteres")]
         [Display(Name = "Nueva Contraseña")]

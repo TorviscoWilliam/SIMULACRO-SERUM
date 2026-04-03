@@ -153,11 +153,38 @@
                             {
                                 <span class="badge bg-secondary">Inactivo</span>
                             }
-                            @if (u.EsTrial && u.Rol != "Admin" && u.Rol != "SuperAdmin")
+                            @if (u.Rol != "Admin" && u.Rol != "SuperAdmin")
                             {
-                                <br/><span class="badge bg-warning text-dark mt-1">
-                                    <i class="bi bi-hourglass-split me-1"></i>Trial
-                                </span>
+                                if (u.EsTrial)
+                                {
+                                    <br/><span class="badge bg-warning text-dark mt-1">
+                                        <i class="bi bi-hourglass-split me-1"></i>Trial
+                                    </span>
+                                }
+                                else if (u.SuscripcionVencida)
+                                {
+                                    <br/><span class="badge bg-danger mt-1" title="Vencida el @u.FechaVencimiento?.ToString("dd/MM/yyyy")">
+                                        <i class="bi bi-calendar-x me-1"></i>Vencida
+                                    </span>
+                                }
+                                else if (u.FechaVencimiento.HasValue && u.DiasRestantes <= 7)
+                                {
+                                    <br/><span class="badge bg-warning text-dark mt-1" title="Vence el @u.FechaVencimiento?.ToString("dd/MM/yyyy")">
+                                        <i class="bi bi-calendar-warning me-1"></i>@u.DiasRestantes día(s)
+                                    </span>
+                                }
+                                else if (u.FechaVencimiento.HasValue)
+                                {
+                                    <br/><span class="badge bg-info text-dark mt-1" title="Vence el @u.FechaVencimiento?.ToString("dd/MM/yyyy")">
+                                        <i class="bi bi-calendar-check me-1"></i>@u.FechaVencimiento?.ToString("dd/MM/yy")
+                                    </span>
+                                }
+                                else
+                                {
+                                    <br/><span class="badge bg-success mt-1">
+                                        <i class="bi bi-infinity me-1"></i>Sin límite
+                                    </span>
+                                }
                             }
                         </td>
                         <td class="text-center">

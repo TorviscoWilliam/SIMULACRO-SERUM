@@ -59,6 +59,16 @@ namespace SimulacroExamen.ViewModels
         /// <summary>true = usuario en modo trial (1 examen de prueba). false = acceso completo.</summary>
         public bool EsTrial { get; set; }
 
+        /// <summary>Fecha en que vence la suscripción. null = sin vencimiento.</summary>
+        public DateTime? FechaVencimiento { get; set; }
+
+        /// <summary>true si la suscripción ya venció (no trial, tiene fecha, ya pasó).</summary>
+        public bool SuscripcionVencida => !EsTrial && FechaVencimiento.HasValue && FechaVencimiento.Value < DateTime.Now;
+
+        /// <summary>Días restantes de suscripción. 0 si no aplica o ya venció.</summary>
+        public int DiasRestantes => (!EsTrial && FechaVencimiento.HasValue && FechaVencimiento.Value >= DateTime.Now)
+            ? (int)Math.Ceiling((FechaVencimiento.Value - DateTime.Now).TotalDays) : 0;
+
         // ── Propiedades calculadas (no persistidas en BD) ──────────────
 
         /// <summary>
