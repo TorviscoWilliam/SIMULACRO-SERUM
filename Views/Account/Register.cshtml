@@ -47,13 +47,13 @@
                         </p>
 
                         <div class="row g-2 mb-2">
-                            <div class="col-6">
+                            <div class="col-12 col-sm-6">
                                 <label asp-for="PrimerNombre" class="form-label fw-semibold small"></label>
                                 <input asp-for="PrimerNombre" id="primerNombre" class="form-control form-control-sm"
                                        placeholder="Ej: JUAN" autocomplete="given-name" />
                                 <span asp-validation-for="PrimerNombre" class="text-danger small"></span>
                             </div>
-                            <div class="col-6">
+                            <div class="col-12 col-sm-6">
                                 <label asp-for="SegundoNombre" class="form-label fw-semibold small"></label>
                                 <input asp-for="SegundoNombre" class="form-control form-control-sm"
                                        placeholder="Opcional" autocomplete="additional-name" />
@@ -62,13 +62,13 @@
                         </div>
 
                         <div class="row g-2 mb-3">
-                            <div class="col-6">
+                            <div class="col-12 col-sm-6">
                                 <label asp-for="PrimerApellido" class="form-label fw-semibold small"></label>
                                 <input asp-for="PrimerApellido" id="primerApellido" class="form-control form-control-sm"
                                        placeholder="Ej: PÉREZ" autocomplete="family-name" />
                                 <span asp-validation-for="PrimerApellido" class="text-danger small"></span>
                             </div>
-                            <div class="col-6">
+                            <div class="col-12 col-sm-6">
                                 <label asp-for="SegundoApellido" class="form-label fw-semibold small"></label>
                                 <input asp-for="SegundoApellido" class="form-control form-control-sm"
                                        placeholder="Opcional" />
@@ -77,7 +77,7 @@
                         </div>
 
                         <div class="row g-2 mb-3">
-                            <div class="col-6">
+                            <div class="col-12 col-sm-6">
                                 <label asp-for="Celular" class="form-label fw-semibold small">
                                     Celular <span class="text-danger">*</span>
                                 </label>
@@ -90,7 +90,7 @@
                                 <span asp-validation-for="Celular" class="text-danger small"></span>
                                 <div id="feedCelular" class="form-text small d-none"></div>
                             </div>
-                            <div class="col-6">
+                            <div class="col-12 col-sm-6">
                                 <label asp-for="Dni" class="form-label fw-semibold small">
                                     DNI <span class="text-danger">*</span>
                                 </label>

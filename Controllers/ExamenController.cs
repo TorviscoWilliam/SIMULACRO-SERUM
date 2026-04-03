@@ -123,6 +123,21 @@ namespace SimulacroExamen.Controllers
                 .OrderBy(p => p.Orden)
                 .ToListAsync();
 
+            // Examen incompleto (reanudable)
+            ViewBag.ExamenEnCurso = await _db.Examenes
+                .Include(e => e.TipoExamen)
+                .Where(e => e.UsuarioId == uid && !e.Completado)
+                .OrderByDescending(e => e.FechaInicio)
+                .Select(e => new {
+                    e.Id,
+                    e.FechaInicio,
+                    e.TotalPreguntas,
+                    e.DuracionSegundos,
+                    TipoNombre = e.TipoExamen != null ? e.TipoExamen.Nombre : "General",
+                    RespuestasDadas = e.PreguntasExamen.Count(pe => pe.AlternativaSeleccionadaId != null)
+                })
+                .FirstOrDefaultAsync();
+
             return View();
         }
 
@@ -145,6 +160,13 @@ namespace SimulacroExamen.Controllers
                 TempData["Error"] = "No tienes acceso a ese tipo de examen.";
                 return RedirectToAction(nameof(Index));
             }
+
+            // Si ya existe un examen incompleto, reanudar ese
+            var examenExistente = await _db.Examenes
+                .FirstOrDefaultAsync(e => e.UsuarioId == uid && !e.Completado);
+
+            if (examenExistente != null)
+                return RedirectToAction(nameof(Tomar), new { id = examenExistente.Id });
 
             // ── Restricciones de modo trial y suscripción vencida ───
             var usuarioTrial = await _db.Usuarios
@@ -249,6 +271,60 @@ namespace SimulacroExamen.Controllers
             return RedirectToAction(nameof(Tomar), new { id = examen.Id });
         }
 
+        // ── POST /Examen/GuardarRespuesta (AJAX) ─────────────────────
+        [HttpPost]
+        public async Task<IActionResult> GuardarRespuesta(int preguntaExamenId, int? alternativaId)
+        {
+            var pe = await _db.PreguntasExamen
+                .Include(p => p.Examen)
+                .Include(p => p.Pregunta).ThenInclude(p => p.Alternativas)
+                .FirstOrDefaultAsync(p => p.Id == preguntaExamenId
+                                       && p.Examen.UsuarioId == UsuarioId
+                                       && !p.Examen.Completado);
+
+            if (pe == null) return NotFound();
+
+            if (alternativaId.HasValue)
+            {
+                var alt = pe.Pregunta.Alternativas.FirstOrDefault(a => a.Id == alternativaId.Value);
+                if (alt != null)
+                {
+                    pe.AlternativaSeleccionadaId = alt.Id;
+                    pe.EsCorrecta               = alt.EsCorrecta;
+                }
+            }
+            else
+            {
+                pe.AlternativaSeleccionadaId = null;
+                pe.EsCorrecta               = false;
+            }
+
+            await _db.SaveChangesAsync();
+            return Ok();
+        }
+
+        // ── POST /Examen/AbandonarExamen ──────────────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AbandonarExamen(int id)
+        {
+            var examen = await _db.Examenes
+                .Include(e => e.PreguntasExamen)
+                .FirstOrDefaultAsync(e => e.Id == id
+                                       && e.UsuarioId == UsuarioId
+                                       && !e.Completado);
+
+            if (examen != null)
+            {
+                _db.PreguntasExamen.RemoveRange(examen.PreguntasExamen);
+                _db.Examenes.Remove(examen);
+                await _db.SaveChangesAsync();
+            }
+
+            TempData["Exito"] = "Examen anterior descartado. Puedes iniciar uno nuevo.";
+            return RedirectToAction(nameof(Index));
+        }
+
         // ── GET /Examen/Tomar/{id} ────────────────────────────────────
         public async Task<IActionResult> Tomar(int id)
         {
@@ -300,11 +376,12 @@ namespace SimulacroExamen.Controllers
 
                 vm.Preguntas.Add(new PreguntaExamenVM
                 {
-                    PreguntaExamenId = pe.Id,
-                    PreguntaId       = pe.PreguntaId,
-                    Orden            = pe.Orden,
-                    TextoPregunta    = pe.Pregunta.TextoPregunta,
-                    Alternativas     = altsOrdenadas
+                    PreguntaExamenId          = pe.Id,
+                    PreguntaId                = pe.PreguntaId,
+                    Orden                     = pe.Orden,
+                    TextoPregunta             = pe.Pregunta.TextoPregunta,
+                    Alternativas              = altsOrdenadas,
+                    AlternativaSeleccionadaId = pe.AlternativaSeleccionadaId
                 });
             }
 

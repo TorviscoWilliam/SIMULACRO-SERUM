@@ -28,7 +28,7 @@ else
                 <div class="card border-0 shadow-sm h-100">
                     @if (!string.IsNullOrEmpty(n.ImagenRuta))
                     {
-                        <img src="@n.ImagenRuta" class="card-img-top object-fit-cover" style="height:200px" alt="@n.Titulo" />
+                        <img src="@n.ImagenRuta" class="card-img-top object-fit-cover img-fluid" style="height:200px;max-height:200px" alt="@n.Titulo" />
                     }
                     <div class="card-body d-flex flex-column">
                         <h5 class="fw-bold card-title">@n.Titulo</h5>

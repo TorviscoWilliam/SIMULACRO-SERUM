@@ -38,6 +38,54 @@
             </div>
         </div>
 
+        <!-- Banner examen en progreso (reanudable) -->
+        @if (ViewBag.ExamenEnCurso != null)
+        {
+            var enc = ViewBag.ExamenEnCurso;
+            var tiempoTranscurrido = (DateTime.Now - (DateTime)enc.FechaInicio);
+            var minutos = (int)tiempoTranscurrido.TotalMinutes;
+            var tiempoTexto = minutos < 60 ? $"hace {minutos} min" : $"hace {(int)(tiempoTranscurrido.TotalHours):0}h {minutos % 60}min";
+            <div class="card border-0 shadow mb-4" style="border-left:5px solid #0d6efd !important;background:linear-gradient(135deg,#dbeafe,#eff6ff);">
+                <div class="card-body py-3 px-4 d-flex align-items-center gap-3 flex-wrap">
+                    <div class="flex-shrink-0 text-primary">
+                        <i class="bi bi-journal-arrow-up" style="font-size:2.5rem"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h6 class="fw-bold text-primary mb-1">
+                            <i class="bi bi-play-circle-fill me-1"></i>Tienes un examen en progreso
+                        </h6>
+                        <p class="mb-0 small text-dark">
+                            <strong>@enc.TipoNombre</strong> —
+                            <span class="text-muted">Iniciado @tiempoTexto</span> ·
+                            <strong>@enc.RespuestasDadas / @enc.TotalPreguntas</strong> preguntas respondidas
+                            @if (enc.DuracionSegundos != null)
+                            {
+                                var restSeg = Math.Max(0, (int)enc.DuracionSegundos - (int)(DateTime.Now - (DateTime)enc.FechaInicio).TotalSeconds);
+                                var restMin = restSeg / 60;
+                                <span class="badge bg-warning text-dark ms-1">
+                                    <i class="bi bi-clock me-1"></i>@restMin min restantes
+                                </span>
+                            }
+                        </p>
+                    </div>
+                    <div class="d-flex gap-2 flex-shrink-0 flex-wrap">
+                        <a href="@Url.Action("Tomar", "Examen", new { id = (int)enc.Id })"
+                           class="btn btn-primary fw-bold">
+                            <i class="bi bi-play-fill me-1"></i>Reanudar
+                        </a>
+                        <form asp-action="AbandonarExamen" method="post" class="d-inline"
+                              onsubmit="return confirm('¿Seguro que quieres descartar este examen? Se perderán las respuestas guardadas.')">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@((int)enc.Id)" />
+                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-trash me-1"></i>Descartar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+
         <!-- Banner modo trial -->
         @if (esTrial)
         {
@@ -286,9 +334,9 @@
 
                     @foreach (var plan in planesSuscripcion)
                     {
-                        var colSize = planesSuscripcion.Count == 1 ? "col-md-8 col-lg-6"
-                                    : planesSuscripcion.Count == 2 ? "col-md-6 col-lg-5"
-                                    : "col-lg-4 col-md-6";
+                        var colSize = planesSuscripcion.Count == 1 ? "col-12 col-md-8 col-lg-6"
+                                    : planesSuscripcion.Count == 2 ? "col-12 col-md-6 col-lg-5"
+                                    : "col-12 col-md-6 col-lg-4";
                         var cardScale = plan.EsPopular ? "transform:scale(1.03);" : "";
                         <div class="@colSize">
                             <div class="card h-100 border-0 shadow text-center overflow-hidden"

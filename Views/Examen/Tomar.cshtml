@@ -82,14 +82,18 @@
                         <div class="ps-5">
                             @foreach (var alt in pvm.Alternativas)
                             {
+                                bool preSeleccionada = pvm.AlternativaSeleccionadaId == alt.Id;
                                 <div class="form-check alternativa-item mb-2">
                                     <input class="form-check-input respuesta-radio"
                                            type="radio"
                                            name="respuesta_@pvm.PreguntaExamenId"
                                            id="alt_@alt.Id"
                                            value="@alt.Id"
-                                           onchange="marcarRespondida(@i)"/>
-                                    <label class="form-check-label alternativa-label w-100 p-2 rounded"
+                                           data-peId="@pvm.PreguntaExamenId"
+                                           data-idx="@i"
+                                           @(preSeleccionada ? "checked" : "")
+                                           onchange="marcarRespondida(@i, this)"/>
+                                    <label class="form-check-label alternativa-label w-100 p-2 rounded @(preSeleccionada ? "seleccionada" : "")"
                                            for="alt_@alt.Id">
                                         @alt.TextoAlternativa
                                     </label>
@@ -125,7 +129,7 @@
 
 <!-- ── Modal: confirmar envío ──────────────────────────────────── -->
 <div class="modal fade" id="modalEnviar" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title fw-bold">
@@ -157,7 +161,7 @@
 
 <!-- ── Modal: alerta 15 minutos ────────────────────────────────── -->
 <div class="modal fade" id="modalAlerta15" tabindex="-1" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 border-top border-warning border-3 shadow">
             <div class="modal-body text-center py-4">
                 <i class="bi bi-alarm text-warning d-block mb-3" style="font-size:3rem"></i>
@@ -177,7 +181,7 @@
 
 <!-- ── Modal: alerta 5 minutos ─────────────────────────────────── -->
 <div class="modal fade" id="modalAlerta5" tabindex="-1" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 border-top border-danger border-3 shadow">
             <div class="modal-body text-center py-4">
                 <i class="bi bi-exclamation-triangle-fill text-danger d-block mb-3" style="font-size:3rem"></i>
@@ -198,9 +202,18 @@
 @section Scripts {
 <script>
     const TOTAL_PREGS  = @totalPregs;
+    const CSRF_TOKEN   = document.querySelector('input[name="__RequestVerificationToken"]').value;
     let respondidas    = new Array(TOTAL_PREGS).fill(false);
     let preguntaActual = 0;
     let examEnviado    = false;
+
+    // ── Inicializar respuestas pre-guardadas ─────────────────────
+    document.querySelectorAll('.respuesta-radio:checked').forEach(radio => {
+        const idx = parseInt(radio.dataset.idx);
+        respondidas[idx] = true;
+        const label = radio.nextElementSibling;
+        if (label) label.classList.add('seleccionada');
+    });
 
     // ── Navegación ───────────────────────────────────────────────
     function irPregunta(idx) {
@@ -218,24 +231,33 @@
         document.getElementById('contadorPregunta').textContent =
             'Pregunta ' + (preguntaActual + 1) + ' de ' + TOTAL_PREGS;
 
-        // Colorear botones de navegación rápida
+        const totalResp = respondidas.filter(Boolean).length;
+        document.getElementById('barraProgreso').style.width = (totalResp / TOTAL_PREGS * 100) + '%';
+        document.getElementById('progTexto').textContent = totalResp + ' / ' + TOTAL_PREGS + ' respondidas';
+
         document.querySelectorAll('.nav-num').forEach((btn, idx) => {
             btn.className = 'btn btn-sm nav-num ' + (
-                idx === preguntaActual   ? 'btn-primary' :
-                respondidas[idx]        ? 'btn-success'  :
-                                          'btn-outline-secondary'
+                idx === preguntaActual ? 'btn-primary' :
+                respondidas[idx]      ? 'btn-success'  :
+                                        'btn-outline-secondary'
             );
         });
     }
 
+    // ── Auto-guardar respuesta via AJAX ──────────────────────────
+    function guardarRespuesta(preguntaExamenId, alternativaId) {
+        const body = new URLSearchParams({
+            preguntaExamenId: preguntaExamenId,
+            alternativaId:    alternativaId,
+            __RequestVerificationToken: CSRF_TOKEN
+        });
+        fetch('/Examen/GuardarRespuesta', { method: 'POST', body: body })
+            .catch(() => {}); // silencioso — el usuario no debe ver errores de guardado
+    }
+
     // ── Al seleccionar respuesta ─────────────────────────────────
-    function marcarRespondida(idx) {
+    function marcarRespondida(idx, radio) {
         respondidas[idx] = true;
-        const totalResp = respondidas.filter(Boolean).length;
-        document.getElementById('barraProgreso').style.width =
-            (totalResp / TOTAL_PREGS * 100) + '%';
-        document.getElementById('progTexto').textContent =
-            totalResp + ' / ' + TOTAL_PREGS + ' respondidas';
 
         // Resaltar alternativa seleccionada
         const card = document.getElementById('card_' + idx);
@@ -245,6 +267,9 @@
         });
 
         actualizarUI();
+
+        // Auto-guardar en BD
+        if (radio) guardarRespuesta(radio.dataset.peId, radio.value);
 
         // Avanzar automáticamente a la siguiente pregunta (pequeño delay)
         if (idx < TOTAL_PREGS - 1) setTimeout(() => irPregunta(idx + 1), 350);

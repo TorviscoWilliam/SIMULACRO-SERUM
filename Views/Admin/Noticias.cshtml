@@ -35,7 +35,7 @@ else
                 <div class="card border-0 shadow-sm h-100 @(n.Activo ? "" : "opacity-50")">
                     @if (!string.IsNullOrEmpty(n.ImagenRuta))
                     {
-                        <img src="@n.ImagenRuta" class="card-img-top object-fit-cover" style="height:180px" alt="@n.Titulo" />
+                        <img src="@n.ImagenRuta" class="card-img-top object-fit-cover img-fluid" style="height:180px;max-height:180px" alt="@n.Titulo" />
                     }
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex align-items-start justify-content-between mb-1 gap-2">

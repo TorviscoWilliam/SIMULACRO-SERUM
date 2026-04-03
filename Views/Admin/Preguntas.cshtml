@@ -34,8 +34,8 @@
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-2">
         <div class="row g-2 align-items-center">
-            <div class="col-md-5">
-                <form method="get" asp-action="Preguntas" class="d-flex gap-2">
+            <div class="col-12 col-md-5">
+                <form method="get" asp-action="Preguntas" class="d-flex gap-2 flex-wrap">
                     <select name="tipoId" class="form-select">
                         <option value="">— Todos los tipos —</option>
                         @foreach (var t in tipos)
@@ -62,12 +62,12 @@
                     }
                 </form>
             </div>
-            <div class="col-md-4">
+            <div class="col-12 col-md-4">
                 <input type="text" id="busqueda" class="form-control"
                        placeholder="Buscar pregunta...">
             </div>
-            <div class="col-md-3">
-                <div class="d-flex align-items-center gap-2">
+            <div class="col-12 col-md-3">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
                     <label class="text-muted small text-nowrap mb-0">Mostrar:</label>
                     <div class="btn-group btn-group-sm" role="group">
                         @foreach (var size in new[] { 10, 25, 100 })
@@ -248,7 +248,7 @@
 
 <!-- Modal Importar Excel -->
 <div class="modal fade" id="modalImportar" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
@@ -295,7 +295,7 @@
 
 <!-- Modal Asignar Tipo de Examen en Masa -->
 <div class="modal fade" id="modalAsignarTipo" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">

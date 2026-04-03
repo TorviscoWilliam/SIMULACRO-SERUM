@@ -2,7 +2,11 @@
 @{
     ViewData["Title"] = "Resultado del Examen";
     string badgeClass  = Model.Porcentaje >= 70 ? "bg-success" : Model.Porcentaje >= 50 ? "bg-warning" : "bg-danger";
-    string iconClass   = Model.Porcentaje >= 70 ? "bi-trophy-fill text-warning" : Model.Porcentaje >= 50 ? "bi-emoji-neutral text-warning" : "bi-emoji-frown text-danger";
+    string catMemeUrl  = Model.Porcentaje >= 70
+        ? "https://media.giphy.com/media/kkpcRessCvNyo/giphy.gif"
+        : Model.Porcentaje >= 50
+            ? "https://media.giphy.com/media/mEtSQlxqBtWWA/giphy.gif"
+            : "https://media.giphy.com/media/OPU6wzx8JrHna/giphy.gif";
     string mensajeMain = Model.Porcentaje >= 70 ? "¡Excelente resultado!" : Model.Porcentaje >= 50 ? "Buen intento, sigue practicando" : "Sigue esforzándote";
     string tituloExamen = !string.IsNullOrEmpty(Model.TipoExamenNombre) ? Model.TipoExamenNombre : "Examen";
 }
@@ -13,7 +17,7 @@
         <!-- Resumen -->
         <div class="card border-0 shadow mb-4">
             <div class="card-body p-4 text-center">
-                <i class="bi @iconClass mb-3 d-block" style="font-size:4rem"></i>
+                <img src="@catMemeUrl" class="mb-3 rounded-3" style="height:180px;object-fit:contain" alt="@mensajeMain" />
                 <span class="badge bg-info-subtle text-info border border-info-subtle mb-2">
                     <i class="bi bi-mortarboard me-1"></i>@tituloExamen
                 </span>
@@ -54,25 +58,25 @@
 
                 <!-- Detalles -->
                 <div class="row g-3 mt-2">
-                    <div class="col-sm-3">
+                    <div class="col-6 col-sm-3">
                         <div class="bg-success-subtle rounded-3 p-3">
                             <div class="fw-bold fs-4 text-success">@Model.Puntaje</div>
                             <div class="small text-muted">Correctas</div>
                         </div>
                     </div>
-                    <div class="col-sm-3">
+                    <div class="col-6 col-sm-3">
                         <div class="bg-danger-subtle rounded-3 p-3">
                             <div class="fw-bold fs-4 text-danger">@(Model.TotalPreguntas - Model.Puntaje)</div>
                             <div class="small text-muted">Incorrectas</div>
                         </div>
                     </div>
-                    <div class="col-sm-3">
+                    <div class="col-6 col-sm-3">
                         <div class="bg-primary-subtle rounded-3 p-3">
                             <div class="fw-bold fs-4 text-primary">@Model.PuntajeVigesimal.ToString("0.##")</div>
                             <div class="small text-muted">Pts (/ 20)</div>
                         </div>
                     </div>
-                    <div class="col-sm-3">
+                    <div class="col-6 col-sm-3">
                         <div class="bg-info-subtle rounded-3 p-3">
                             <div class="fw-bold fs-4 text-info">
                                 @((int)Model.Duracion.TotalMinutes)m @(Model.Duracion.Seconds)s

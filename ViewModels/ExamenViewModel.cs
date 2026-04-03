@@ -39,6 +39,12 @@ namespace SimulacroExamen.ViewModels
         /// No incluye EsCorrecta para que el usuario no pueda inspeccionarla en el HTML.
         /// </summary>
         public List<AlternativaVM> Alternativas { get; set; } = new();
+
+        /// <summary>
+        /// ID de la alternativa guardada (auto-guardado). Null si no se respondió aún.
+        /// Se usa para pre-seleccionar la respuesta al reanudar el examen.
+        /// </summary>
+        public int? AlternativaSeleccionadaId { get; set; }
     }
 
     /// <summary>
