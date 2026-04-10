@@ -187,37 +187,44 @@ namespace SimulacroExamen.Controllers
                 await RecargarTipos(); return View(vm);
             }
 
-            // ── Resolver username con fallback a SegundoNombre ───────
-            var nombreUpper = vm.NombreUsuario.Trim().ToUpperInvariant();
+            // ── Generar username automáticamente desde el servidor ───
+            var primerN     = vm.PrimerNombre.Trim().Split(' ')[0].ToUpperInvariant();
+            var primerA     = vm.PrimerApellido.Trim().Split(' ')[0].ToUpperInvariant();
+            var usernameBase = $"{primerN}.{primerA}";
+            string nombreUpper;
 
-            if (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == nombreUpper))
+            if (!await _db.Usuarios.AnyAsync(u => u.NombreUsuario == usernameBase))
             {
-                var primerN     = vm.PrimerNombre.Trim().Split(' ')[0].ToUpperInvariant();
-                var primerA     = vm.PrimerApellido.Trim().Split(' ')[0].ToUpperInvariant();
-                var usernameGen = $"{primerN}.{primerA}";
-
-                if (nombreUpper == usernameGen && !string.IsNullOrWhiteSpace(vm.SegundoNombre))
+                // Opción 1: NOMBRE.APELLIDO disponible
+                nombreUpper = usernameBase;
+            }
+            else if (!string.IsNullOrWhiteSpace(vm.SegundoNombre))
+            {
+                // Opción 2: SEGUNDONOMBRE.APELLIDO
+                var segundoN = vm.SegundoNombre.Trim().Split(' ')[0].ToUpperInvariant();
+                var fallback = $"{segundoN}.{primerA}";
+                if (!await _db.Usuarios.AnyAsync(u => u.NombreUsuario == fallback))
                 {
-                    var segundoN = vm.SegundoNombre.Trim().Split(' ')[0].ToUpperInvariant();
-                    var fallback = $"{segundoN}.{primerA}";
-
-                    if (!await _db.Usuarios.AnyAsync(u => u.NombreUsuario == fallback))
-                    {
-                        nombreUpper = fallback;
-                    }
-                    else
-                    {
-                        ModelState.AddModelError(nameof(vm.NombreUsuario),
-                            $"'{usernameGen}' y '{fallback}' ya están en uso. Por favor elige un nombre de usuario diferente.");
-                        await RecargarTipos(); return View(vm);
-                    }
+                    nombreUpper = fallback;
                 }
                 else
                 {
-                    ModelState.AddModelError(nameof(vm.NombreUsuario), "Ese nombre de usuario ya está en uso.");
-                    await RecargarTipos(); return View(vm);
+                    // Opción 3: NOMBRE.APELLIDO2, NOMBRE.APELLIDO3…
+                    int i = 2;
+                    do { nombreUpper = $"{usernameBase}{i++}"; }
+                    while (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == nombreUpper) && i < 100);
                 }
             }
+            else
+            {
+                // Opción 3 directa: NOMBRE.APELLIDO2, NOMBRE.APELLIDO3…
+                int i = 2;
+                nombreUpper = usernameBase;
+                do { nombreUpper = $"{usernameBase}{i++}"; }
+                while (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == nombreUpper) && i < 100);
+            }
+
+            var tokenVerificacion = Guid.NewGuid().ToString("N");
 
             var tokenVerificacion = Guid.NewGuid().ToString("N");
 

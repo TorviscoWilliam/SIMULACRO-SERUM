@@ -114,16 +114,14 @@
                         </p>
 
                         <div class="mb-3">
-                            <label asp-for="NombreUsuario" class="form-label fw-semibold small"></label>
+                            <label class="form-label fw-semibold small">Nombre de Usuario</label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text"><i class="bi bi-person"></i></span>
-                                <input asp-for="NombreUsuario" id="nombreUsuario" class="form-control"
-                                       placeholder="Se genera automáticamente" autocomplete="username"/>
-                                <span class="input-group-text px-2" id="feedUsuarioIcon"></span>
+                                <input id="nombreUsuario" name="NombreUsuario" class="form-control bg-body-secondary"
+                                       placeholder="Se genera al escribir tu nombre…" readonly tabindex="-1"/>
                             </div>
-                            <span asp-validation-for="NombreUsuario" class="text-danger small"></span>
-                            <div id="feedUsuario" class="form-text small">
-                                <i class="bi bi-magic me-1"></i>Se genera como <strong>PrimerNombre.PrimerApellido</strong> — puedes editarlo.
+                            <div class="form-text small text-muted">
+                                <i class="bi bi-magic me-1"></i>Se asigna automáticamente como <strong>Nombre.Apellido</strong>.
                             </div>
                         </div>
 
@@ -214,8 +212,6 @@
     const inputCelular        = document.querySelector('[name="Celular"]');
     const inputDni            = document.querySelector('[name="Dni"]');
 
-    let usuarioEditado = false;
-
     // ── Utilidad: mostrar feedback bajo un campo ──────────────────
     function setFeed(feedId, iconId, estado, msg) {
         // estado: 'ok' | 'error' | 'reset'
@@ -245,61 +241,15 @@
         } catch { return null; }
     }
 
-    // ── Auto-generar y verificar username ─────────────────────────
-    function computarUsername(usarSegundo) {
-        const src  = usarSegundo ? inputSegundoNombre : inputPrimerNombre;
-        const n    = (src?.value || '').trim().split(/\s+/)[0].toUpperCase();
-        const a    = inputPrimerApellido.value.trim().split(/\s+/)[0].toUpperCase();
-        return (n && a) ? `${n}.${a}` : (n || a || '');
-    }
-
+    // ── Auto-generar username (solo preview, el servidor lo confirma) ──
     function generarUsuario() {
-        if (usuarioEditado) return;
-        const u = computarUsername(false);
-        if (u) {
-            inputUsuario.value = u;
-            setFeed('feedUsuario', 'feedUsuarioIcon', 'reset', '');
-        }
+        const n = (inputPrimerNombre.value || '').trim().split(/\s+/)[0].toUpperCase();
+        const a = (inputPrimerApellido.value || '').trim().split(/\s+/)[0].toUpperCase();
+        inputUsuario.value = (n && a) ? `${n}.${a}` : (n || a || '');
     }
 
     inputPrimerNombre.addEventListener('input', generarUsuario);
     inputPrimerApellido.addEventListener('input', generarUsuario);
-
-    // Verificar username al salir del campo
-    inputUsuario.addEventListener('blur', async function () {
-        if (!this.value.trim()) { usuarioEditado = false; return; }
-        const val = this.value.trim().toUpperCase();
-        const ocupado = await verificar('usuario', val);
-        if (ocupado === null) return;
-
-        if (ocupado) {
-            // ¿Tiene segundo nombre para intentar fallback?
-            const seg = (inputSegundoNombre?.value || '').trim();
-            if (!usuarioEditado && seg) {
-                const fallback = computarUsername(true);
-                const fbOcupado = await verificar('usuario', fallback);
-                if (!fbOcupado) {
-                    inputUsuario.value = fallback;
-                    usuarioEditado = false;
-                    setFeed('feedUsuario', 'feedUsuarioIcon', 'ok',
-                        `<i class="bi bi-magic me-1"></i>Usuario cambiado a <strong>${fallback}</strong> (usando tu segundo nombre).`);
-                } else {
-                    setFeed('feedUsuario', 'feedUsuarioIcon', 'error',
-                        `"${val}" y "${fallback}" ya están en uso. Elige otro usuario.`);
-                }
-            } else {
-                setFeed('feedUsuario', 'feedUsuarioIcon', 'error',
-                    `"${val}" ya está en uso. Elige otro nombre de usuario.`);
-            }
-        } else {
-            setFeed('feedUsuario', 'feedUsuarioIcon', 'ok', 'Usuario disponible.');
-        }
-    });
-
-    inputUsuario.addEventListener('input', function () {
-        usuarioEditado = this.value !== '';
-        setFeed('feedUsuario', 'feedUsuarioIcon', 'reset', '');
-    });
 
     // ── Verificar correo ──────────────────────────────────────────
     inputCorreo.addEventListener('blur', async function () {
