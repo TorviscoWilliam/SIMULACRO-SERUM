@@ -62,6 +62,12 @@ namespace SimulacroExamen.ViewModels
         /// <summary>Fecha en que vence la suscripción. null = sin vencimiento.</summary>
         public DateTime? FechaVencimiento { get; set; }
 
+        /// <summary>ID del plan contratado. Null si no tiene plan asignado.</summary>
+        public int? PlanSuscripcionId { get; set; }
+
+        /// <summary>Nombre del plan contratado. Null si no tiene plan asignado.</summary>
+        public string? PlanNombre { get; set; }
+
         /// <summary>true si la suscripción ya venció (no trial, tiene fecha, ya pasó).</summary>
         public bool SuscripcionVencida => !EsTrial && FechaVencimiento.HasValue && FechaVencimiento.Value < DateTime.Now;
 

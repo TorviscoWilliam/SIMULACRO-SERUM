@@ -6,7 +6,7 @@ namespace SimulacroExamen.Models
     /// Representa una opción de respuesta asociada a una Pregunta.
     /// Exactamente una alternativa de cada pregunta debe tener EsCorrecta = true.
     /// Al mostrar el examen, las alternativas se presentan en orden aleatorio
-    /// (guardado en PreguntaExamen.OrdenAlternativas) para que no sea predecible.
+    /// (guardado en OrdenAlternativaExamen) para que no sea predecible.
     /// </summary>
     public class Alternativa
     {

@@ -65,15 +65,15 @@ else
 
                         <!-- Características (máx 3 líneas preview) -->
                         <ul class="list-unstyled small text-muted flex-grow-1 mb-2">
-                            @foreach (var feat in (p.Caracteristicas ?? "").Split('\n').Take(3).Where(f => !string.IsNullOrWhiteSpace(f)))
+                            @foreach (var feat in p.Caracteristicas.OrderBy(c => c.Orden).Take(3))
                             {
                                 <li class="d-flex gap-2">
                                     <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                    <span>@feat.Replace("**", "")</span>
+                                    <span>@feat.Texto.Replace("**", "")</span>
                                 </li>
                             }
                             @{
-                                var total = (p.Caracteristicas ?? "").Split('\n').Count(f => !string.IsNullOrWhiteSpace(f));
+                                var total = p.Caracteristicas.Count;
                                 if (total > 3)
                                 {
                                     <li class="text-muted fst-italic small">+ @(total - 3) más...</li>

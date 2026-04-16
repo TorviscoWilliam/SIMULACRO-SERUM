@@ -34,6 +34,9 @@ namespace SimulacroExamen.ViewModels
         [Display(Name = "Fecha de Vencimiento")]
         public DateTime? FechaVencimiento { get; set; }
 
+        [Display(Name = "Plan de Suscripción")]
+        public int? PlanSuscripcionId { get; set; }
+
         [DataType(DataType.Password)]
         [MinLength(6, ErrorMessage = "Mínimo 6 caracteres")]
         [Display(Name = "Nueva Contraseña")]

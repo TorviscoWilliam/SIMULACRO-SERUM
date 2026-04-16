@@ -37,8 +37,8 @@ namespace SimulacroExamen.Models
         [MaxLength(200)]
         public string? TextoBadge { get; set; }
 
-        /// <summary>Lista de características, una por línea</summary>
-        public string Caracteristicas { get; set; } = string.Empty;
+        /// <summary>Lista de características del plan (una por fila en la tabla CaracteristicaPlan).</summary>
+        public ICollection<CaracteristicaPlan> Caracteristicas { get; set; } = new List<CaracteristicaPlan>();
 
         /// <summary>Enlace de WhatsApp o página de pago</summary>
         [MaxLength(500)]

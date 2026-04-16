@@ -51,7 +51,9 @@ else
                         </div>
                         <p class="card-text text-muted small flex-grow-1"
                            style="white-space:pre-line;max-height:100px;overflow:hidden">@n.Contenido</p>
-                        @if (!string.IsNullOrEmpty(n.EnlaceUrl))
+                        @if (!string.IsNullOrEmpty(n.EnlaceUrl) &&
+                             (n.EnlaceUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                              n.EnlaceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)))
                         {
                             <div class="mt-2">
                                 <a href="@n.EnlaceUrl" target="_blank" rel="noopener noreferrer"

@@ -226,9 +226,7 @@ namespace SimulacroExamen.Controllers
 
             var tokenVerificacion = Guid.NewGuid().ToString("N");
 
-            var tokenVerificacion = Guid.NewGuid().ToString("N");
-
-            var nuevoUsuario = new Usuario
+            var nuevoUsuario = new Estudiante
             {
                 NombreUsuario          = nombreUpper,
                 Correo                 = vm.Correo.Trim(),

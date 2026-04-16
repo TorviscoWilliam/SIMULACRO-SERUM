@@ -9,25 +9,23 @@ using SimulacroExamen.ViewModels;
 namespace SimulacroExamen.Controllers
 {
     [Authorize(Roles = "Admin,SuperAdmin")]
-    public class AdminController : Controller
+    public class AdminController : BaseController
     {
-        private bool EsSuperAdmin() => User.IsInRole("SuperAdmin");
-
-        private int CurrentUserId()
-        {
-            var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            return int.TryParse(claim, out var id) ? id : throw new UnauthorizedAccessException();
-        }
-
         private readonly ApplicationDbContext _db;
         private readonly IExcelService        _excel;
         private readonly IWebHostEnvironment  _env;
+        private readonly IEmailService        _email;
+        private readonly IConfiguration       _config;
 
-        public AdminController(ApplicationDbContext db, IExcelService excel, IWebHostEnvironment env)
+        public AdminController(ApplicationDbContext db, IExcelService excel,
+                               IWebHostEnvironment env, IEmailService email,
+                               IConfiguration config)
         {
-            _db    = db;
-            _excel = excel;
-            _env   = env;
+            _db     = db;
+            _excel  = excel;
+            _env    = env;
+            _email  = email;
+            _config = config;
         }
 
         // ── Dashboard ────────────────────────────────────────────────
@@ -44,8 +42,8 @@ namespace SimulacroExamen.Controllers
             ViewBag.EsFiltrado    = filtro != hoy || !string.IsNullOrWhiteSpace(usuario);
 
             // ── Stats generales (sin filtro) ─────────────────────────
-            ViewBag.TotalUsuarios  = await _db.Usuarios.CountAsync(u => u.Rol == "Usuario" && u.Activo);
-            ViewBag.TotalAdmins    = await _db.Usuarios.CountAsync(u => (u.Rol == "Admin" || u.Rol == "SuperAdmin") && u.Activo);
+            ViewBag.TotalUsuarios  = await _db.Estudiantes.CountAsync(u => u.Activo);
+            ViewBag.TotalAdmins    = await _db.Administradores.CountAsync(u => u.Activo);
             ViewBag.TotalPreguntas = await _db.Preguntas.CountAsync(p => p.Activo);
             ViewBag.TotalExamenes  = await _db.Examenes.CountAsync(e => e.Completado);
             ViewBag.PromedioGlobal = await _db.Examenes
@@ -156,44 +154,66 @@ namespace SimulacroExamen.Controllers
         {
             const int pageSize = 15;
 
-            var query = _db.Usuarios.AsQueryable();
-            var total = await query.CountAsync();
+            var total = await _db.Usuarios.CountAsync();
 
-            var usuarios = await query
+            // Cargamos las entidades en memoria para poder acceder a campos
+            // polimórficos (EsTrial, FechaVencimiento, IntentosExtra, PlanSuscripcionId) de Estudiante.
+            var raw = await _db.Usuarios
+                .Include(u => u.Examenes)
+                .Include(u => u.UsuariosTipoExamen).ThenInclude(ut => ut.TipoExamen)
                 .OrderByDescending(u => u.FechaCreacion)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(u => new UsuarioListaViewModel
-                {
-                    Id            = u.Id,
-                    NombreUsuario = u.NombreUsuario,
-                    Correo        = u.Correo,
-                    Rol           = u.Rol,
-                    FechaCreacion = u.FechaCreacion,
-                    Activo        = u.Activo,
-                    TotalExamenes = u.Examenes.Count(e => e.Completado),
-                    MejorPuntaje  = u.Examenes.Any(e => e.Completado)
-                        ? u.Examenes.Where(e => e.Completado).Max(e => e.Puntaje)
-                        : 0,
-                    TiposAsignados = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList(),
-                    IntentosExtra  = u.IntentosExtra,
-                    NombreCompleto = (u.PrimerNombre != null || u.PrimerApellido != null)
-                        ? ((u.PrimerNombre ?? "") +
-                           (u.SegundoNombre  != null ? " " + u.SegundoNombre  : "") +
-                           (u.PrimerApellido != null ? " " + u.PrimerApellido : "") +
-                           (u.SegundoApellido != null ? " " + u.SegundoApellido : "")).Trim()
-                        : null,
-                    Celular          = u.Celular,
-                    Dni              = u.Dni,
-                    EsTrial          = u.EsTrial,
-                    FechaVencimiento = u.FechaVencimiento
-                })
                 .ToListAsync();
 
-            ViewBag.Page       = page;
-            ViewBag.PageSize   = pageSize;
-            ViewBag.TotalItems = total;
-            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
+            // Carga los nombres de planes para los estudiantes de esta página (1 query extra)
+            var planIds = raw.OfType<Estudiante>()
+                .Where(e => e.PlanSuscripcionId.HasValue)
+                .Select(e => e.PlanSuscripcionId!.Value)
+                .Distinct().ToList();
+            var planesNombre = planIds.Any()
+                ? await _db.PlanesSuscripcion
+                    .Where(p => planIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, p => p.Nombre)
+                : new Dictionary<int, string>();
+
+            var usuarios = raw.Select(u =>
+            {
+                var est = u as Estudiante;
+                return new UsuarioListaViewModel
+                {
+                    Id               = u.Id,
+                    NombreUsuario    = u.NombreUsuario,
+                    Correo           = u.Correo,
+                    Rol              = u.Rol,
+                    FechaCreacion    = u.FechaCreacion,
+                    Activo           = u.Activo,
+                    TotalExamenes    = u.Examenes.Count(e => e.Completado),
+                    MejorPuntaje     = u.Examenes.Any(e => e.Completado)
+                        ? u.Examenes.Where(e => e.Completado).Max(e => e.Puntaje)
+                        : 0,
+                    TiposAsignados   = u.UsuariosTipoExamen
+                        .Select(ut => ut.TipoExamen.Nombre).ToList(),
+                    IntentosExtra    = est?.IntentosExtra ?? 0,
+                    NombreCompleto   = u.NombreCompleto.Length > 0 ? u.NombreCompleto : null,
+                    Celular          = u.Celular,
+                    Dni              = u.Dni,
+                    EsTrial          = est?.EsTrial ?? false,
+                    FechaVencimiento = est?.FechaVencimiento,
+                    PlanSuscripcionId = est?.PlanSuscripcionId,
+                    PlanNombre       = est?.PlanSuscripcionId.HasValue == true
+                        ? planesNombre.GetValueOrDefault(est.PlanSuscripcionId.Value)
+                        : null
+                };
+            }).ToList();
+
+            ViewBag.Page             = page;
+            ViewBag.PageSize         = pageSize;
+            ViewBag.TotalItems       = total;
+            ViewBag.TotalPages       = (int)Math.Ceiling(total / (double)pageSize);
+            ViewBag.PlanesDisponibles = await _db.PlanesSuscripcion
+                .Where(p => p.Activo).OrderBy(p => p.Orden)
+                .Select(p => new { p.Id, p.Nombre }).ToListAsync();
 
             return View(usuarios);
         }
@@ -204,12 +224,16 @@ namespace SimulacroExamen.Controllers
         public async Task<IActionResult> AjustarIntentos(int id, int intentosExtra)
         {
             var u = await _db.Usuarios.FindAsync(id);
-            if (u == null) return NotFound();
+            if (u is not Estudiante est)
+            {
+                TempData["Error"] = "Solo se pueden ajustar intentos para estudiantes.";
+                return RedirectToAction(nameof(Usuarios));
+            }
 
-            u.IntentosExtra = Math.Max(0, intentosExtra);
+            est.IntentosExtra = Math.Max(0, intentosExtra);
             await _db.SaveChangesAsync();
 
-            TempData["Exito"] = $"Intentos diarios de '{u.NombreUsuario}' actualizados a {5 + u.IntentosExtra}.";
+            TempData["Exito"] = $"Intentos diarios de '{est.NombreUsuario}' actualizados a {5 + est.IntentosExtra}.";
             return RedirectToAction(nameof(Usuarios));
         }
 
@@ -237,7 +261,7 @@ namespace SimulacroExamen.Controllers
                 return View(vm);
             }
 
-            var rolesPermitidos = EsSuperAdmin()
+            var rolesPermitidos = EsSuperAdmin
                 ? new[] { "SuperAdmin", "Admin", "Usuario" }
                 : new[] { "Admin", "Usuario" };
             if (!rolesPermitidos.Contains(vm.Rol))
@@ -246,22 +270,27 @@ namespace SimulacroExamen.Controllers
                 return View(vm);
             }
 
-            _db.Usuarios.Add(new Usuario
-            {
-                NombreUsuario   = nombreUpper,
-                Correo          = vm.Correo.Trim(),
-                Contrasena      = BCrypt.Net.BCrypt.HashPassword(vm.Contrasena),
-                Rol             = vm.Rol,
-                FechaCreacion   = DateTime.Now,
-                Activo          = true,
-                EsTrial         = vm.EsTrial,
-                PrimerNombre    = string.IsNullOrWhiteSpace(vm.PrimerNombre)    ? null : vm.PrimerNombre.Trim(),
-                SegundoNombre   = string.IsNullOrWhiteSpace(vm.SegundoNombre)   ? null : vm.SegundoNombre.Trim(),
-                PrimerApellido  = string.IsNullOrWhiteSpace(vm.PrimerApellido)  ? null : vm.PrimerApellido.Trim(),
-                SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim(),
-                Celular         = string.IsNullOrWhiteSpace(vm.Celular)         ? null : vm.Celular.Trim(),
-                Dni             = string.IsNullOrWhiteSpace(vm.Dni)             ? null : vm.Dni.Trim()
-            });
+            Usuario nuevoUsuario = vm.Rol == "Usuario"
+                ? new Estudiante
+                {
+                    EsTrial = vm.EsTrial
+                }
+                : new Administrador();
+
+            nuevoUsuario.NombreUsuario   = nombreUpper;
+            nuevoUsuario.Correo          = vm.Correo.Trim();
+            nuevoUsuario.Contrasena      = BCrypt.Net.BCrypt.HashPassword(vm.Contrasena);
+            nuevoUsuario.Rol             = vm.Rol;
+            nuevoUsuario.FechaCreacion   = DateTime.Now;
+            nuevoUsuario.Activo          = true;
+            nuevoUsuario.PrimerNombre    = string.IsNullOrWhiteSpace(vm.PrimerNombre)    ? null : vm.PrimerNombre.Trim();
+            nuevoUsuario.SegundoNombre   = string.IsNullOrWhiteSpace(vm.SegundoNombre)   ? null : vm.SegundoNombre.Trim();
+            nuevoUsuario.PrimerApellido  = string.IsNullOrWhiteSpace(vm.PrimerApellido)  ? null : vm.PrimerApellido.Trim();
+            nuevoUsuario.SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim();
+            nuevoUsuario.Celular         = string.IsNullOrWhiteSpace(vm.Celular)         ? null : vm.Celular.Trim();
+            nuevoUsuario.Dni             = string.IsNullOrWhiteSpace(vm.Dni)             ? null : vm.Dni.Trim();
+
+            _db.Usuarios.Add(nuevoUsuario);
 
             await _db.SaveChangesAsync();
             TempData["Exito"] = $"Usuario '{nombreUpper}' creado correctamente.";
@@ -275,7 +304,7 @@ namespace SimulacroExamen.Controllers
             if (usuario == null) return NotFound();
 
             // Solo el SuperAdmin puede editar a otro SuperAdmin
-            if (usuario.Rol == "SuperAdmin" && !EsSuperAdmin())
+            if (usuario.Rol == "SuperAdmin" && !EsSuperAdmin)
             {
                 TempData["Error"] = "No tienes permisos para editar al administrador principal.";
                 return RedirectToAction(nameof(Usuarios));
@@ -283,18 +312,24 @@ namespace SimulacroExamen.Controllers
 
             var vm = new EditarUsuarioViewModel
             {
-                Id              = usuario.Id,
-                NombreUsuario   = usuario.NombreUsuario,
-                Correo          = usuario.Correo,
-                Rol             = usuario.Rol,
-                PrimerNombre    = usuario.PrimerNombre,
-                SegundoNombre   = usuario.SegundoNombre,
-                PrimerApellido  = usuario.PrimerApellido,
-                SegundoApellido = usuario.SegundoApellido,
-                Celular         = usuario.Celular,
-                Dni             = usuario.Dni,
-                FechaVencimiento = usuario.FechaVencimiento
+                Id                = usuario.Id,
+                NombreUsuario     = usuario.NombreUsuario,
+                Correo            = usuario.Correo,
+                Rol               = usuario.Rol,
+                PrimerNombre      = usuario.PrimerNombre,
+                SegundoNombre     = usuario.SegundoNombre,
+                PrimerApellido    = usuario.PrimerApellido,
+                SegundoApellido   = usuario.SegundoApellido,
+                Celular           = usuario.Celular,
+                Dni               = usuario.Dni,
+                FechaVencimiento  = (usuario as Estudiante)?.FechaVencimiento,
+                PlanSuscripcionId = (usuario as Estudiante)?.PlanSuscripcionId
             };
+
+            ViewBag.PlanesDisponibles = await _db.PlanesSuscripcion
+                .Where(p => p.Activo).OrderBy(p => p.Orden)
+                .Select(p => new { p.Id, p.Nombre }).ToListAsync();
+
             return View(vm);
         }
 
@@ -303,7 +338,12 @@ namespace SimulacroExamen.Controllers
         public async Task<IActionResult> EditarUsuario(EditarUsuarioViewModel vm)
         {
             if (!ModelState.IsValid)
+            {
+                ViewBag.PlanesDisponibles = await _db.PlanesSuscripcion
+                    .Where(p => p.Activo).OrderBy(p => p.Orden)
+                    .Select(p => new { p.Id, p.Nombre }).ToListAsync();
                 return View(vm);
+            }
 
             var usuario = await _db.Usuarios.FindAsync(vm.Id);
             if (usuario == null) return NotFound();
@@ -322,7 +362,7 @@ namespace SimulacroExamen.Controllers
                 return View(vm);
             }
 
-            var rolesValidos = EsSuperAdmin()
+            var rolesValidos = EsSuperAdmin
                 ? new[] { "SuperAdmin", "Admin", "Usuario" }
                 : new[] { "Admin", "Usuario" };
             if (!rolesValidos.Contains(vm.Rol))
@@ -332,10 +372,22 @@ namespace SimulacroExamen.Controllers
             }
 
             // Solo el SuperAdmin puede editar a otro SuperAdmin
-            if (usuario.Rol == "SuperAdmin" && !EsSuperAdmin())
+            if (usuario.Rol == "SuperAdmin" && !EsSuperAdmin)
             {
                 TempData["Error"] = "No tienes permisos para editar al administrador principal.";
                 return RedirectToAction(nameof(Usuarios));
+            }
+
+            // Detectar cambio de tipo: Estudiante→Admin o Admin→Estudiante requiere
+            // eliminar y recrear el usuario. Se bloquea vía validación de rol.
+            bool esEstudianteActual = usuario is Estudiante;
+            bool seriaEstudiante    = vm.Rol == "Usuario";
+            if (esEstudianteActual != seriaEstudiante)
+            {
+                ModelState.AddModelError(nameof(vm.Rol),
+                    "No se puede cambiar un Estudiante a Administrador o viceversa. " +
+                    "Elimina el usuario y créalo de nuevo con el rol correcto.");
+                return View(vm);
             }
 
             usuario.NombreUsuario   = nombreUpper;
@@ -347,7 +399,12 @@ namespace SimulacroExamen.Controllers
             usuario.SegundoApellido = string.IsNullOrWhiteSpace(vm.SegundoApellido) ? null : vm.SegundoApellido.Trim().ToUpperInvariant();
             usuario.Celular          = string.IsNullOrWhiteSpace(vm.Celular) ? null : vm.Celular.Trim();
             usuario.Dni              = string.IsNullOrWhiteSpace(vm.Dni)    ? null : vm.Dni.Trim();
-            usuario.FechaVencimiento = vm.FechaVencimiento;
+
+            if (usuario is Estudiante est)
+            {
+                est.FechaVencimiento  = vm.FechaVencimiento;
+                est.PlanSuscripcionId = vm.PlanSuscripcionId;
+            }
 
             if (!string.IsNullOrWhiteSpace(vm.ContrasenaNueva))
                 usuario.Contrasena = BCrypt.Net.BCrypt.HashPassword(vm.ContrasenaNueva);
@@ -365,7 +422,7 @@ namespace SimulacroExamen.Controllers
             if (u == null) return NotFound();
 
             // No permitir desactivarse a uno mismo
-            var currentId = CurrentUserId();
+            var currentId = CurrentUserId;
             if (u.Id == currentId)
             {
                 TempData["Error"] = "No puedes desactivar tu propia cuenta.";
@@ -373,7 +430,7 @@ namespace SimulacroExamen.Controllers
             }
 
             // Solo el SuperAdmin puede desactivar a otro SuperAdmin
-            if (u.Rol == "SuperAdmin" && !EsSuperAdmin())
+            if (u.Rol == "SuperAdmin" && !EsSuperAdmin)
             {
                 TempData["Error"] = "No tienes permisos para desactivar al administrador principal.";
                 return RedirectToAction(nameof(Usuarios));
@@ -392,19 +449,32 @@ namespace SimulacroExamen.Controllers
         // POST /Admin/ActivarAccesoCompleto/{id}
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ActivarAccesoCompleto(int id)
+        public async Task<IActionResult> ActivarAccesoCompleto(int id, int? planId)
         {
             var u = await _db.Usuarios.FindAsync(id);
-            if (u == null) return NotFound();
+            if (u is not Estudiante est)
+            {
+                TempData["Error"] = "Solo se puede activar acceso completo para estudiantes.";
+                return RedirectToAction(nameof(Usuarios));
+            }
 
-            u.EsTrial = false;
-            // Si no tiene fecha de vencimiento asignada, establecer 30 días por defecto
-            if (u.FechaVencimiento == null || u.FechaVencimiento < DateTime.Now)
-                u.FechaVencimiento = DateTime.Now.AddDays(30);
+            est.EsTrial = false;
+            est.PlanSuscripcionId = planId;
+
+            if (est.FechaVencimiento == null || est.FechaVencimiento < DateTime.Now)
+                est.FechaVencimiento = DateTime.Now.AddDays(30);
+
             await _db.SaveChangesAsync();
 
-            await RegistrarLog("ActivarAccesoCompleto", $"Usuario '{u.NombreUsuario}' promovido de trial a acceso completo (vence {u.FechaVencimiento:dd/MM/yyyy})");
-            TempData["Exito"] = $"'{u.NombreUsuario}' ahora tiene acceso completo hasta el {u.FechaVencimiento:dd/MM/yyyy}.";
+            var planNombre = planId.HasValue
+                ? (await _db.PlanesSuscripcion.FindAsync(planId.Value))?.Nombre ?? "—"
+                : "—";
+
+            await RegistrarLog("ActivarAccesoCompleto",
+                $"Estudiante '{est.NombreUsuario}' promovido a acceso completo " +
+                $"| Plan: {planNombre} | Vence: {est.FechaVencimiento:dd/MM/yyyy}");
+            TempData["Exito"] = $"'{est.NombreUsuario}' tiene acceso completo hasta el {est.FechaVencimiento:dd/MM/yyyy}" +
+                                (planId.HasValue ? $" (Plan: {planNombre})." : ".");
             return RedirectToAction(nameof(Usuarios));
         }
 
@@ -414,13 +484,18 @@ namespace SimulacroExamen.Controllers
         public async Task<IActionResult> ActivarTrial(int id)
         {
             var u = await _db.Usuarios.FindAsync(id);
-            if (u == null) return NotFound();
+            if (u is not Estudiante est)
+            {
+                TempData["Error"] = "Solo se puede revertir a trial para estudiantes.";
+                return RedirectToAction(nameof(Usuarios));
+            }
 
-            u.EsTrial = true;
+            est.EsTrial = true;
+            est.PlanSuscripcionId = null;
             await _db.SaveChangesAsync();
 
-            await RegistrarLog("ActivarTrial", $"Usuario '{u.NombreUsuario}' revertido a modo de prueba (trial)");
-            TempData["Exito"] = $"'{u.NombreUsuario}' ha sido puesto en modo de prueba (trial).";
+            await RegistrarLog("ActivarTrial", $"Estudiante '{est.NombreUsuario}' revertido a modo de prueba (trial)");
+            TempData["Exito"] = $"'{est.NombreUsuario}' ha sido puesto en modo de prueba (trial).";
             return RedirectToAction(nameof(Usuarios));
         }
 
@@ -433,7 +508,7 @@ namespace SimulacroExamen.Controllers
             var u = await _db.Usuarios.FindAsync(id);
             if (u == null) return NotFound();
 
-            var currentId = CurrentUserId();
+            var currentId = CurrentUserId;
             if (u.Id == currentId)
             {
                 TempData["Error"] = "No puedes eliminar tu propia cuenta.";
@@ -451,9 +526,30 @@ namespace SimulacroExamen.Controllers
 
         public async Task<IActionResult> ExportarUsuarios()
         {
-            var usuarios = await _db.Usuarios
+            var raw = await _db.Usuarios
+                .Include(u => u.Examenes)
+                .Include(u => u.UsuariosTipoExamen).ThenInclude(ut => ut.TipoExamen)
                 .OrderBy(u => u.NombreUsuario)
-                .Select(u => new UsuarioListaViewModel
+                .ToListAsync();
+
+            // Load plan names for students that have a plan assigned
+            var planIds = raw.OfType<Estudiante>()
+                .Where(e => e.PlanSuscripcionId.HasValue)
+                .Select(e => e.PlanSuscripcionId!.Value)
+                .Distinct()
+                .ToList();
+
+            var planNombres = planIds.Count > 0
+                ? await _db.PlanesSuscripcion
+                    .Where(p => planIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, p => p.Nombre)
+                : new Dictionary<int, string>();
+
+            var usuarios = raw.Select(u =>
+            {
+                var est = u as Estudiante;
+                var planId = est?.PlanSuscripcionId;
+                return new UsuarioListaViewModel
                 {
                     Id            = u.Id,
                     NombreUsuario = u.NombreUsuario,
@@ -466,10 +562,12 @@ namespace SimulacroExamen.Controllers
                         ? u.Examenes.Where(e => e.Completado).Max(e => e.Puntaje)
                         : 0,
                     TiposAsignados   = u.UsuariosTipoExamen.Select(ut => ut.TipoExamen.Nombre).ToList(),
-                    EsTrial          = u.EsTrial,
-                    FechaVencimiento = u.FechaVencimiento
-                })
-                .ToListAsync();
+                    EsTrial          = est?.EsTrial ?? false,
+                    FechaVencimiento = est?.FechaVencimiento,
+                    PlanSuscripcionId = planId,
+                    PlanNombre        = planId.HasValue && planNombres.TryGetValue(planId.Value, out var pn) ? pn : null
+                };
+            }).ToList();
 
             var bytes    = _excel.ExportarUsuarios(usuarios);
             var filename = $"Usuarios_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
@@ -485,9 +583,9 @@ namespace SimulacroExamen.Controllers
         // GET /Admin/AsignarAcceso/{id}
         public async Task<IActionResult> AsignarAcceso(int id)
         {
-            var usuario = await _db.Usuarios
+            var usuario = await _db.Estudiantes
                 .Include(u => u.UsuariosTipoExamen)
-                .FirstOrDefaultAsync(u => u.Id == id && u.Rol == "Usuario");
+                .FirstOrDefaultAsync(u => u.Id == id);
 
             if (usuario == null) return NotFound();
 
@@ -514,9 +612,9 @@ namespace SimulacroExamen.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AsignarAcceso(int usuarioId, int[] tiposSeleccionados)
         {
-            var usuario = await _db.Usuarios
+            var usuario = await _db.Estudiantes
                 .Include(u => u.UsuariosTipoExamen)
-                .FirstOrDefaultAsync(u => u.Id == usuarioId && u.Rol == "Usuario");
+                .FirstOrDefaultAsync(u => u.Id == usuarioId);
 
             if (usuario == null) return NotFound();
 
@@ -1012,6 +1110,12 @@ namespace SimulacroExamen.Controllers
                     return View(vm);
                 }
 
+                if (!EsImagenValida(vm.Imagen))
+                {
+                    ModelState.AddModelError("Imagen", "El archivo no es una imagen válida.");
+                    return View(vm);
+                }
+
                 const long maxSize = 5 * 1024 * 1024; // 5 MB
                 if (vm.Imagen.Length > maxSize)
                 {
@@ -1031,14 +1135,14 @@ namespace SimulacroExamen.Controllers
                 imagenRuta = $"/uploads/noticias/{fileName}";
             }
 
-            var adminId = CurrentUserId();
+            var adminId = CurrentUserId;
 
             _db.Noticias.Add(new Noticia
             {
                 Titulo           = vm.Titulo.Trim(),
                 Contenido        = vm.Contenido.Trim(),
                 ImagenRuta       = imagenRuta,
-                EnlaceUrl        = string.IsNullOrWhiteSpace(vm.EnlaceUrl) ? null : vm.EnlaceUrl.Trim(),
+                EnlaceUrl        = SanitizarEnlace(vm.EnlaceUrl),
                 FechaPublicacion = DateTime.Now,
                 AdminId          = adminId,
                 Activo           = true
@@ -1085,6 +1189,13 @@ namespace SimulacroExamen.Controllers
                     return View(vm);
                 }
 
+                if (!EsImagenValida(vm.Imagen))
+                {
+                    ModelState.AddModelError("Imagen", "El archivo no es una imagen válida.");
+                    vm.ImagenRutaActual = n.ImagenRuta;
+                    return View(vm);
+                }
+
                 const long maxSize = 5 * 1024 * 1024;
                 if (vm.Imagen.Length > maxSize)
                 {
@@ -1115,7 +1226,7 @@ namespace SimulacroExamen.Controllers
 
             n.Titulo    = vm.Titulo.Trim();
             n.Contenido = vm.Contenido.Trim();
-            n.EnlaceUrl = string.IsNullOrWhiteSpace(vm.EnlaceUrl) ? null : vm.EnlaceUrl.Trim();
+            n.EnlaceUrl = SanitizarEnlace(vm.EnlaceUrl);
 
             await _db.SaveChangesAsync();
             TempData["Exito"] = "Noticia actualizada correctamente.";
@@ -1214,7 +1325,7 @@ namespace SimulacroExamen.Controllers
                     continue;
                 }
 
-                _db.Usuarios.Add(new Usuario
+                _db.Usuarios.Add(new Estudiante
                 {
                     NombreUsuario   = usuario,
                     Correo          = correo,
@@ -1225,7 +1336,8 @@ namespace SimulacroExamen.Controllers
                     Celular         = celular,
                     Dni             = dni,
                     FechaCreacion   = DateTime.Now,
-                    Activo          = true
+                    Activo          = true,
+                    EsTrial         = true
                 });
                 creados++;
             }
@@ -1266,31 +1378,39 @@ namespace SimulacroExamen.Controllers
 
             var query = _db.PreguntasExamen
                 .Include(pe => pe.Pregunta).ThenInclude(p => p!.TipoExamen)
+                .Include(pe => pe.AlternativaSeleccionada)
                 .AsQueryable();
 
             if (tipoId.HasValue)
                 query = query.Where(pe => pe.Pregunta!.TipoExamenId == tipoId.Value);
 
-            var stats = await query
-                .GroupBy(pe => new
+            // Carga plana a memoria: evita subconsulta dentro de agregado (SQL Server no lo admite)
+            var raw = await query
+                .Select(pe => new
                 {
                     pe.PreguntaId,
-                    Texto    = pe.Pregunta!.TextoPregunta,
-                    TipoNom  = pe.Pregunta.TipoExamen != null ? pe.Pregunta.TipoExamen.Nombre : "Sin tipo"
+                    Texto      = pe.Pregunta!.TextoPregunta,
+                    TipoNom    = pe.Pregunta.TipoExamen != null ? pe.Pregunta.TipoExamen.Nombre : "Sin tipo",
+                    EsCorrecta = pe.AlternativaSeleccionadaId != null && pe.AlternativaSeleccionada!.EsCorrecta
                 })
+                .ToListAsync();
+
+            // Agrupación y cálculo en memoria (LINQ to Objects)
+            var stats = raw
+                .GroupBy(x => new { x.PreguntaId, x.Texto, x.TipoNom })
                 .Select(g => new EstadisticaPreguntaVM
                 {
                     PreguntaId    = g.Key.PreguntaId,
                     TextoPregunta = g.Key.Texto,
                     TipoNombre    = g.Key.TipoNom,
                     TotalVeces    = g.Count(),
-                    Incorrectas   = g.Count(pe => !pe.EsCorrecta),
-                    Correctas     = g.Count(pe => pe.EsCorrecta)
+                    Correctas     = g.Count(x => x.EsCorrecta),
+                    Incorrectas   = g.Count(x => !x.EsCorrecta)
                 })
                 .Where(s => s.TotalVeces >= 1)
                 .OrderByDescending(s => (double)s.Incorrectas / s.TotalVeces)
                 .Take(100)
-                .ToListAsync();
+                .ToList();
 
             return View(stats);
         }
@@ -1302,7 +1422,7 @@ namespace SimulacroExamen.Controllers
         public async Task<IActionResult> Logs(int page = 1)
         {
             const int pageSize = 50;
-            var query = _db.LogsActividad.OrderByDescending(l => l.Fecha);
+            var query = _db.LogsActividad.Include(l => l.Admin).OrderByDescending(l => l.Fecha);
             var total = await query.CountAsync();
             var logs  = await query
                 .Skip((page - 1) * pageSize)
@@ -1381,6 +1501,7 @@ namespace SimulacroExamen.Controllers
         public async Task<IActionResult> Planes()
         {
             var planes = await _db.PlanesSuscripcion
+                .Include(p => p.Caracteristicas)
                 .OrderBy(p => p.Orden)
                 .ToListAsync();
             return View(planes);
@@ -1397,8 +1518,11 @@ namespace SimulacroExamen.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CrearPlan(PlanSuscripcion plan)
         {
+            ModelState.Remove(nameof(PlanSuscripcion.Caracteristicas));
             if (!ModelState.IsValid) return View(plan);
-            plan.FechaCreacion = DateTime.Now;
+
+            plan.FechaCreacion  = DateTime.Now;
+            plan.Caracteristicas = ParsearCaracteristicas(Request.Form["CaracteristicasTexto"].ToString());
             _db.PlanesSuscripcion.Add(plan);
             await _db.SaveChangesAsync();
             await RegistrarLog("Crear Plan", $"Plan creado: {plan.Nombre}");
@@ -1408,7 +1532,9 @@ namespace SimulacroExamen.Controllers
 
         public async Task<IActionResult> EditarPlan(int id)
         {
-            var plan = await _db.PlanesSuscripcion.FindAsync(id);
+            var plan = await _db.PlanesSuscripcion
+                .Include(p => p.Caracteristicas)
+                .FirstOrDefaultAsync(p => p.Id == id);
             if (plan == null) return NotFound();
             return View(plan);
         }
@@ -1417,8 +1543,12 @@ namespace SimulacroExamen.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditarPlan(PlanSuscripcion plan)
         {
+            ModelState.Remove(nameof(PlanSuscripcion.Caracteristicas));
             if (!ModelState.IsValid) return View(plan);
-            var existing = await _db.PlanesSuscripcion.FindAsync(plan.Id);
+
+            var existing = await _db.PlanesSuscripcion
+                .Include(p => p.Caracteristicas)
+                .FirstOrDefaultAsync(p => p.Id == plan.Id);
             if (existing == null) return NotFound();
 
             existing.Nombre          = plan.Nombre;
@@ -1429,11 +1559,13 @@ namespace SimulacroExamen.Controllers
             existing.ColorSecundario = plan.ColorSecundario;
             existing.EsPopular       = plan.EsPopular;
             existing.TextoBadge      = plan.TextoBadge;
-            existing.Caracteristicas = plan.Caracteristicas;
             existing.EnlaceBoton     = plan.EnlaceBoton;
             existing.TextoBoton      = plan.TextoBoton;
             existing.Activo          = plan.Activo;
             existing.Orden           = plan.Orden;
+
+            _db.CaracteristicasPlan.RemoveRange(existing.Caracteristicas);
+            existing.Caracteristicas = ParsearCaracteristicas(Request.Form["CaracteristicasTexto"].ToString());
 
             await _db.SaveChangesAsync();
             await RegistrarLog("Editar Plan", $"Plan editado: {plan.Nombre}");
@@ -1487,7 +1619,7 @@ namespace SimulacroExamen.Controllers
             }
 
             var anuncio = await _db.AnunciosGlobales.FirstOrDefaultAsync();
-            var adminId = CurrentUserId();
+            var adminId = CurrentUserId;
 
             if (anuncio == null)
             {
@@ -1513,15 +1645,143 @@ namespace SimulacroExamen.Controllers
             return RedirectToAction(nameof(AnuncioGlobal));
         }
 
+        // ── Helper: parsear características de textarea a colección ──
+        private static List<CaracteristicaPlan> ParsearCaracteristicas(string texto) =>
+            texto.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                 .Select(l => l.Trim())
+                 .Where(l => !string.IsNullOrWhiteSpace(l))
+                 .Select((t, i) => new CaracteristicaPlan { Texto = t, Orden = i })
+                 .ToList();
+
+        // ── Helper: sanitizar URL (solo permite http/https) ──────────
+        private static string? SanitizarEnlace(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return null;
+            var trimmed = url.Trim();
+            return trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                   trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase)
+                   ? trimmed : null;
+        }
+
+        // ── Helper: validar magic bytes de imagen ────────────────────
+        private static bool EsImagenValida(IFormFile archivo)
+        {
+            var header = new byte[12];
+            using var stream = archivo.OpenReadStream();
+            var read = stream.Read(header, 0, header.Length);
+            if (read < 3) return false;
+
+            // JPEG: FF D8 FF
+            if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) return true;
+            // PNG: 89 50 4E 47 0D 0A 1A 0A
+            if (read >= 8 &&
+                header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 &&
+                header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) return true;
+            // GIF87a / GIF89a: 47 49 46 38 37/39 61
+            if (read >= 6 &&
+                header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38 &&
+                (header[4] == 0x37 || header[4] == 0x39) && header[5] == 0x61) return true;
+            // WebP: RIFF????WEBP
+            if (read >= 12 &&
+                header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46 &&
+                header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50) return true;
+
+            return false;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  CONFIGURACIÓN DE CORREO  (solo SuperAdmin)
+        // ═══════════════════════════════════════════════════════════
+
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> ConfiguracionCorreo()
+        {
+            var cfg = await _db.ConfiguracionCorreo.OrderBy(c => c.Id).FirstOrDefaultAsync();
+
+            var vm = new ConfiguracionCorreoViewModel
+            {
+                YaConfigurado  = cfg != null,
+                Smtp           = cfg?.Smtp           ?? _config["Email:Smtp"]      ?? "smtp.gmail.com",
+                Puerto         = cfg?.Puerto         ?? int.Parse(_config["Email:Port"] ?? "587"),
+                UsuarioCorreo  = cfg?.UsuarioCorreo  ?? _config["Email:Usuario"]   ?? "",
+                NombreRemitente= cfg?.NombreRemitente?? _config["Email:Remitente"] ?? "Simulacro SERUMS",
+                UsarSsl        = cfg?.UsarSsl        ?? true,
+                // No enviamos la contraseña al cliente por seguridad
+                Contrasena     = null
+            };
+
+            return View(vm);
+        }
+
+        [HttpPost, Authorize(Roles = "SuperAdmin"), ValidateAntiForgeryToken]
+        public async Task<IActionResult> ConfiguracionCorreo(ConfiguracionCorreoViewModel vm)
+        {
+            if (!ModelState.IsValid) return View(vm);
+
+            var cfg = await _db.ConfiguracionCorreo.OrderBy(c => c.Id).FirstOrDefaultAsync();
+
+            if (cfg == null)
+            {
+                cfg = new Models.ConfiguracionCorreo { AdminId = CurrentUserId };
+                _db.ConfiguracionCorreo.Add(cfg);
+            }
+
+            cfg.Smtp            = vm.Smtp.Trim();
+            cfg.Puerto          = vm.Puerto;
+            cfg.UsuarioCorreo   = vm.UsuarioCorreo.Trim();
+            cfg.NombreRemitente = vm.NombreRemitente.Trim();
+            cfg.UsarSsl         = vm.UsarSsl;
+            cfg.UltimaActualizacion = DateTime.Now;
+            cfg.AdminId         = CurrentUserId;
+
+            // Solo actualiza la contraseña si el admin introdujo una nueva
+            if (!string.IsNullOrWhiteSpace(vm.Contrasena))
+                cfg.Contrasena = vm.Contrasena.Trim();
+
+            await _db.SaveChangesAsync();
+            await RegistrarLog("ConfiguracionCorreo", "Configuración SMTP actualizada");
+            TempData["Exito"] = "Configuración de correo guardada correctamente.";
+            return RedirectToAction(nameof(ConfiguracionCorreo));
+        }
+
+        [HttpPost, Authorize(Roles = "SuperAdmin"), ValidateAntiForgeryToken]
+        public async Task<IActionResult> ProbarCorreo(string correoDestino)
+        {
+            if (string.IsNullOrWhiteSpace(correoDestino) ||
+                !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(correoDestino))
+                return Json(new { ok = false, mensaje = "Correo de destino inválido." });
+
+            try
+            {
+                await _email.EnviarAsync(
+                    correoDestino,
+                    "Prueba de configuración SMTP — Simulacro SERUMS",
+                    $"""
+                    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;
+                                border:1px solid #dee2e6;border-radius:8px;">
+                        <h2 style="color:#198754;">✅ Correo de prueba enviado</h2>
+                        <p>Si estás leyendo este mensaje, la configuración SMTP está funcionando correctamente.</p>
+                        <p style="color:#6c757d;font-size:.85rem;">
+                            Enviado el {DateTime.Now:dd/MM/yyyy HH:mm} por el panel de administración.
+                        </p>
+                    </div>
+                    """);
+
+                return Json(new { ok = true, mensaje = $"Correo enviado a {correoDestino}." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { ok = false, mensaje = $"Error al enviar: {ex.Message}" });
+            }
+        }
+
         // ── Helper: registrar log de actividad ────────────────────
         private async Task RegistrarLog(string accion, string descripcion)
         {
-            var adminId     = CurrentUserId();
-            var adminNombre = User.Identity?.Name ?? "Admin";
+            var adminId = CurrentUserId;
             _db.LogsActividad.Add(new LogActividad
             {
                 AdminId     = adminId,
-                AdminNombre = adminNombre,
                 Accion      = accion,
                 Descripcion = descripcion,
                 Fecha       = DateTime.Now

@@ -85,11 +85,15 @@ using (var scope = app.Services.CreateScope())
     // Sembrar administrador principal (SuperAdmin) – solo si no existe
     if (!context.Usuarios.Any(u => u.NombreUsuario == "LEAO.HUACAUSI"))
     {
-        context.Usuarios.Add(new Usuario
+        var superAdminPass = app.Configuration["DefaultUsers:SuperAdminPassword"]
+                             ?? Environment.GetEnvironmentVariable("SUPERADMIN_PASSWORD")
+                             ?? throw new InvalidOperationException(
+                                 "Falta la contraseña del SuperAdmin. Configura DefaultUsers:SuperAdminPassword o la variable de entorno SUPERADMIN_PASSWORD.");
+        context.Administradores.Add(new Administrador
         {
             NombreUsuario = "LEAO.HUACAUSI",
             Correo        = "leao.huacausi@simulacro.com",
-            Contrasena    = BCrypt.Net.BCrypt.HashPassword("Mender_2201"),
+            Contrasena    = BCrypt.Net.BCrypt.HashPassword(superAdminPass),
             Rol           = "SuperAdmin",
             FechaCreacion = DateTime.Now,
             Activo        = true
@@ -100,11 +104,15 @@ using (var scope = app.Services.CreateScope())
     // Sembrar administrador por defecto (contraseña cifrada con BCrypt)
     if (!context.Usuarios.Any(u => u.Rol == "Admin"))
     {
-        context.Usuarios.Add(new Usuario
+        var adminPass = app.Configuration["DefaultUsers:AdminPassword"]
+                        ?? Environment.GetEnvironmentVariable("ADMIN_PASSWORD")
+                        ?? throw new InvalidOperationException(
+                            "Falta la contraseña del Admin. Configura DefaultUsers:AdminPassword o la variable de entorno ADMIN_PASSWORD.");
+        context.Administradores.Add(new Administrador
         {
             NombreUsuario = "ADMIN",
             Correo        = "admin@simulacro.com",
-            Contrasena    = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+            Contrasena    = BCrypt.Net.BCrypt.HashPassword(adminPass),
             Rol           = "Admin",
             FechaCreacion = DateTime.Now,
             Activo        = true
@@ -142,6 +150,59 @@ using (var scope = app.Services.CreateScope())
         }
     }
     context.SaveChanges();
+
+    // Sembrar planes de suscripción si no existen
+    if (!context.PlanesSuscripcion.Any())
+    {
+        context.PlanesSuscripcion.AddRange(
+            new PlanSuscripcion
+            {
+                Nombre = "Pruebita", Etiqueta = "PLAN MENSUAL", Precio = 8,
+                TextoPrecio = "mensuales", ColorPrimario = "#74c0fc", ColorSecundario = "#4dabf7",
+                EsPopular = false, TextoBadge = "Solo para los 50 Primeros ¡Hasta agotar cupo!",
+                EnlaceBoton = "https://wa.me/51936037152", TextoBoton = "¡Suscribirme ya!",
+                Activo = true, Orden = 1,
+                Caracteristicas = new List<CaracteristicaPlan>
+                {
+                    new() { Texto = "Acceso **limitado** a simulacros de examen.", Orden = 0 },
+                    new() { Texto = "Calculadora para estimar tu nota final.", Orden = 1 },
+                    new() { Texto = "Noticias y convocatorias relevantes sobre exámenes.", Orden = 2 }
+                }
+            },
+            new PlanSuscripcion
+            {
+                Nombre = "El Aplicado", Etiqueta = "PLAN MENSUAL", Precio = 15,
+                TextoPrecio = "mensuales", ColorPrimario = "#69db7c", ColorSecundario = "#40c057",
+                EsPopular = true, TextoBadge = null,
+                EnlaceBoton = "https://wa.me/51936037152", TextoBoton = "¡Suscribirme ya!",
+                Activo = true, Orden = 2,
+                Caracteristicas = new List<CaracteristicaPlan>
+                {
+                    new() { Texto = "Acceso **ilimitado** a simulacros de examen.", Orden = 0 },
+                    new() { Texto = "Calculadora para estimar **tu nota final.**", Orden = 1 },
+                    new() { Texto = "**Noticias y convocatorias** relevantes sobre exámenes.", Orden = 2 },
+                    new() { Texto = "**Asistencia prioritaria** y soporte más rápido.", Orden = 3 }
+                }
+            },
+            new PlanSuscripcion
+            {
+                Nombre = "Postulante Premium", Etiqueta = "PLAN POR 2 MESES", Precio = 20,
+                TextoPrecio = "por 2 meses", ColorPrimario = "#ffa94d", ColorSecundario = "#f76707",
+                EsPopular = false, TextoBadge = null,
+                EnlaceBoton = "https://wa.me/51936037152", TextoBoton = "¡Suscribirme ya!",
+                Activo = true, Orden = 3,
+                Caracteristicas = new List<CaracteristicaPlan>
+                {
+                    new() { Texto = "Acceso **ilimitado** a simulacros de examen.", Orden = 0 },
+                    new() { Texto = "Calculadora para estimar tu nota final.", Orden = 1 },
+                    new() { Texto = "**Noticias y convocatorias** relevantes sobre exámenes.", Orden = 2 },
+                    new() { Texto = "**Asistencia prioritaria** y soporte más rápido.", Orden = 3 },
+                    new() { Texto = "Participa en **sorteos exclusivos.**", Orden = 4 }
+                }
+            }
+        );
+        context.SaveChanges();
+    }
 }
 
 app.Run();
@@ -149,18 +210,26 @@ app.Run();
 // ── Helper: agregar columnas/tablas nuevas sin romper la BD existente ────
 static void MigrarEsquema(ApplicationDbContext context)
 {
+    var conn = context.Database.GetDbConnection();
     try
     {
-        var conn = context.Database.GetDbConnection();
         if (conn.State != System.Data.ConnectionState.Open)
             conn.Open();
+    }
+    catch { return; } // Sin conexión no hay nada que hacer
 
-        void Exec(string sql)
+    // Cada sentencia falla de forma independiente: si una falla,
+    // las demás siguen ejecutándose (evita que un catch global las bloquee).
+    void Exec(string sql)
+    {
+        try
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
             cmd.ExecuteNonQuery();
         }
+        catch { /* sentencia individual falló; continuar con las demás */ }
+    }
 
         // Columna NotaPonderada en Usuarios
         Exec(@"IF NOT EXISTS (
@@ -231,12 +300,47 @@ static void MigrarEsquema(ApplicationDbContext context)
         // Usuarios existentes se marcan como verificados para no interrumpir acceso
         Exec(@"UPDATE Usuarios SET EmailVerificado = 1 WHERE EmailVerificado = 0 AND FechaCreacion < GETDATE()");
 
+        // Columna PlanSuscripcionId en Usuarios (FK → PlanesSuscripcion, solo Estudiante)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='PlanSuscripcionId')
+               BEGIN
+                   ALTER TABLE Usuarios ADD PlanSuscripcionId INT NULL;
+                   IF OBJECT_ID('PlanesSuscripcion') IS NOT NULL
+                       ALTER TABLE Usuarios ADD CONSTRAINT FK_Usuarios_PlanSuscripcion
+                           FOREIGN KEY (PlanSuscripcionId) REFERENCES PlanesSuscripcion(Id)
+                           ON DELETE SET NULL;
+               END");
+
+        // Columna Discriminador para herencia TPH (Administrador / Estudiante)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='Discriminador')
+               BEGIN
+                   ALTER TABLE Usuarios ADD Discriminador NVARCHAR(50) NOT NULL DEFAULT 'Estudiante';
+                   UPDATE Usuarios SET Discriminador = 'Administrador' WHERE Rol IN ('Admin','SuperAdmin');
+               END");
+
 
         // Columna DuracionSegundos en Examenes
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Examenes' AND COLUMN_NAME='DuracionSegundos')
                ALTER TABLE Examenes ADD DuracionSegundos int NULL");
+
+        // Tabla CaracteristicasPlan (normalización de PlanesSuscripcion.Caracteristicas)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='CaracteristicasPlan')
+               CREATE TABLE CaracteristicasPlan (
+                   Id                INT IDENTITY(1,1) PRIMARY KEY,
+                   PlanSuscripcionId INT            NOT NULL,
+                   Texto             NVARCHAR(300)  NOT NULL,
+                   Orden             INT            NOT NULL DEFAULT 0,
+                   CONSTRAINT FK_CaracteristicasPlan_Planes
+                       FOREIGN KEY (PlanSuscripcionId)
+                       REFERENCES PlanesSuscripcion(Id) ON DELETE CASCADE
+               )");
 
         // Tabla Noticias
         Exec(@"IF NOT EXISTS (
@@ -346,14 +450,36 @@ Participa en **sorteos exclusivos.**',
                    Id           INT IDENTITY(1,1) PRIMARY KEY,
                    Fecha        DATETIME2        NOT NULL DEFAULT GETDATE(),
                    AdminId      INT              NOT NULL,
-                   AdminNombre  NVARCHAR(100)    NOT NULL,
                    Accion       NVARCHAR(100)    NOT NULL,
                    Descripcion  NVARCHAR(500)    NOT NULL
                )");
 
+        // AdminNombre era NOT NULL sin default en versiones anteriores;
+        // EF Core no lo escribe en INSERT → falla. Lo convertimos a NULL.
+        Exec(@"IF EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='LogsActividad' AND COLUMN_NAME='AdminNombre'
+                   AND IS_NULLABLE='NO')
+               ALTER TABLE LogsActividad ALTER COLUMN AdminNombre NVARCHAR(100) NULL");
+
+        // Tabla ConfiguracionCorreo (configuración SMTP editable desde el panel SuperAdmin)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='ConfiguracionCorreo')
+               CREATE TABLE ConfiguracionCorreo (
+                   Id                   INT IDENTITY(1,1) PRIMARY KEY,
+                   Smtp                 NVARCHAR(200)  NOT NULL DEFAULT 'smtp.gmail.com',
+                   Puerto               INT            NOT NULL DEFAULT 587,
+                   UsuarioCorreo        NVARCHAR(200)  NOT NULL DEFAULT '',
+                   Contrasena           NVARCHAR(200)  NOT NULL DEFAULT '',
+                   NombreRemitente      NVARCHAR(200)  NOT NULL DEFAULT 'Simulacro SERUMS',
+                   UsarSsl              BIT            NOT NULL DEFAULT 1,
+                   UltimaActualizacion  DATETIME2      NOT NULL DEFAULT GETDATE(),
+                   AdminId              INT            NOT NULL DEFAULT 0
+               )");
+
+    if (conn.State == System.Data.ConnectionState.Open)
         conn.Close();
-    }
-    catch { /* Si falla la migración opcional, no bloquear el inicio */ }
 }
 
 // ── Helper: crear esquema desde cero si las tablas no existen ────

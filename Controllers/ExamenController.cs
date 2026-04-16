@@ -4,12 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
 using SimulacroExamen.ViewModels;
-using System.Security.Claims;
 
 namespace SimulacroExamen.Controllers
 {
     [Authorize(Roles = "Usuario")]
-    public class ExamenController : Controller
+    public class ExamenController : BaseController
     {
         private readonly ApplicationDbContext _db;
         private readonly IConfiguration       _config;
@@ -20,14 +19,10 @@ namespace SimulacroExamen.Controllers
             _config = config;
         }
 
-        private int UsuarioId =>
-            int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-                ? id : throw new UnauthorizedAccessException();
-
         // ── Panel principal: muestra los tipos de examen disponibles ──
         public async Task<IActionResult> Index()
         {
-            var uid = UsuarioId;
+            var uid = CurrentUserId;
 
             // Tipos de examen a los que el usuario tiene acceso
             var tiposAcceso = await _db.UsuarioTiposExamen
@@ -66,7 +61,7 @@ namespace SimulacroExamen.Controllers
             var hoy = DateTime.Today;
             var intentosHoy = await _db.Examenes
                 .CountAsync(e => e.UsuarioId == uid && e.FechaInicio >= hoy);
-            var limiteExtra = await _db.Usuarios
+            var limiteExtra = await _db.Estudiantes
                 .Where(u => u.Id == uid)
                 .Select(u => u.IntentosExtra)
                 .FirstOrDefaultAsync();
@@ -75,7 +70,7 @@ namespace SimulacroExamen.Controllers
             ViewBag.LimiteDiario      = 5 + limiteExtra;
 
             // Estado trial y suscripción
-            var usuarioData = await _db.Usuarios
+            var usuarioData = await _db.Estudiantes
                 .Where(u => u.Id == uid)
                 .Select(u => new { u.EsTrial, u.FechaVencimiento })
                 .FirstOrDefaultAsync();
@@ -119,6 +114,7 @@ namespace SimulacroExamen.Controllers
 
             // Planes de suscripción para el modal trial
             ViewBag.PlanesSuscripcion = await _db.PlanesSuscripcion
+                .Include(p => p.Caracteristicas)
                 .Where(p => p.Activo)
                 .OrderBy(p => p.Orden)
                 .ToListAsync();
@@ -149,7 +145,7 @@ namespace SimulacroExamen.Controllers
             if (numPreguntas != 20 && numPreguntas != 50 && numPreguntas != 100)
                 numPreguntas = 20;
 
-            var uid = UsuarioId;
+            var uid = CurrentUserId;
 
             // Verificar que el usuario tiene acceso a este tipo
             var tieneAcceso = await _db.UsuarioTiposExamen
@@ -169,7 +165,7 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Tomar), new { id = examenExistente.Id });
 
             // ── Restricciones de modo trial y suscripción vencida ───
-            var usuarioTrial = await _db.Usuarios
+            var usuarioTrial = await _db.Estudiantes
                 .Where(u => u.Id == uid)
                 .Select(u => new { u.EsTrial, u.IntentosExtra, u.FechaVencimiento })
                 .FirstOrDefaultAsync();
@@ -259,10 +255,14 @@ namespace SimulacroExamen.Controllers
 
                 _db.PreguntasExamen.Add(new PreguntaExamen
                 {
-                    ExamenId          = examen.Id,
-                    PreguntaId        = p.Id,
-                    Orden             = i + 1,
-                    OrdenAlternativas = string.Join(",", altsOrden)
+                    ExamenId  = examen.Id,
+                    PreguntaId = p.Id,
+                    Orden     = i + 1,
+                    OrdenAlternativasExamen = altsOrden.Select((altId, idx) => new OrdenAlternativaExamen
+                    {
+                        AlternativaId = altId,
+                        Orden         = idx
+                    }).ToList()
                 });
             }
 
@@ -273,13 +273,14 @@ namespace SimulacroExamen.Controllers
 
         // ── POST /Examen/GuardarRespuesta (AJAX) ─────────────────────
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> GuardarRespuesta(int preguntaExamenId, int? alternativaId)
         {
             var pe = await _db.PreguntasExamen
                 .Include(p => p.Examen)
                 .Include(p => p.Pregunta).ThenInclude(p => p.Alternativas)
                 .FirstOrDefaultAsync(p => p.Id == preguntaExamenId
-                                       && p.Examen.UsuarioId == UsuarioId
+                                       && p.Examen.UsuarioId == CurrentUserId
                                        && !p.Examen.Completado);
 
             if (pe == null) return NotFound();
@@ -290,13 +291,11 @@ namespace SimulacroExamen.Controllers
                 if (alt != null)
                 {
                     pe.AlternativaSeleccionadaId = alt.Id;
-                    pe.EsCorrecta               = alt.EsCorrecta;
                 }
             }
             else
             {
                 pe.AlternativaSeleccionadaId = null;
-                pe.EsCorrecta               = false;
             }
 
             await _db.SaveChangesAsync();
@@ -311,7 +310,7 @@ namespace SimulacroExamen.Controllers
             var examen = await _db.Examenes
                 .Include(e => e.PreguntasExamen)
                 .FirstOrDefaultAsync(e => e.Id == id
-                                       && e.UsuarioId == UsuarioId
+                                       && e.UsuarioId == CurrentUserId
                                        && !e.Completado);
 
             if (examen != null)
@@ -333,7 +332,9 @@ namespace SimulacroExamen.Controllers
                 .Include(e => e.PreguntasExamen)
                     .ThenInclude(pe => pe.Pregunta)
                         .ThenInclude(p => p.Alternativas)
-                .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == UsuarioId && !e.Completado);
+                .Include(e => e.PreguntasExamen)
+                    .ThenInclude(pe => pe.OrdenAlternativasExamen)
+                .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == CurrentUserId && !e.Completado);
 
             if (examen == null)
                 return RedirectToAction(nameof(Index));
@@ -358,14 +359,9 @@ namespace SimulacroExamen.Controllers
 
             foreach (var pe in examen.PreguntasExamen.OrderBy(x => x.Orden))
             {
-                var idsOrden = pe.OrdenAlternativas
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Where(s => int.TryParse(s, out _))
-                    .Select(int.Parse)
-                    .ToList();
-
-                var altsOrdenadas = idsOrden
-                    .Select(altId => pe.Pregunta.Alternativas.FirstOrDefault(a => a.Id == altId))
+                var altsOrdenadas = pe.OrdenAlternativasExamen
+                    .OrderBy(o => o.Orden)
+                    .Select(o => pe.Pregunta.Alternativas.FirstOrDefault(a => a.Id == o.AlternativaId))
                     .Where(a => a != null)
                     .Select(a => new AlternativaVM
                     {
@@ -400,7 +396,7 @@ namespace SimulacroExamen.Controllers
                 .Include(e => e.PreguntasExamen)
                     .ThenInclude(pe => pe.Pregunta)
                         .ThenInclude(p => p.Alternativas)
-                .FirstOrDefaultAsync(e => e.Id == examenId && e.UsuarioId == UsuarioId && !e.Completado);
+                .FirstOrDefaultAsync(e => e.Id == examenId && e.UsuarioId == CurrentUserId && !e.Completado);
 
             if (examen == null)
                 return RedirectToAction(nameof(Index));
@@ -416,7 +412,6 @@ namespace SimulacroExamen.Controllers
                     if (alt != null)
                     {
                         pe.AlternativaSeleccionadaId = altId;
-                        pe.EsCorrecta                = alt.EsCorrecta;
                         if (alt.EsCorrecta) puntaje++;
                     }
                 }
@@ -440,13 +435,13 @@ namespace SimulacroExamen.Controllers
                         .ThenInclude(p => p.Alternativas)
                 .Include(e => e.PreguntasExamen)
                     .ThenInclude(pe => pe.AlternativaSeleccionada)
-                .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == UsuarioId && e.Completado);
+                .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == CurrentUserId && e.Completado);
 
             if (examen == null)
                 return RedirectToAction(nameof(Historial));
 
-            var notaPonderada = await _db.Usuarios
-                .Where(u => u.Id == UsuarioId)
+            var notaPonderada = await _db.Estudiantes
+                .Where(u => u.Id == CurrentUserId)
                 .Select(u => u.NotaPonderada)
                 .FirstOrDefaultAsync();
 
@@ -478,7 +473,7 @@ namespace SimulacroExamen.Controllers
                     TextoPregunta         = pe.Pregunta.TextoPregunta,
                     RespuestaCorrecta     = correcta?.TextoAlternativa ?? "-",
                     RespuestaSeleccionada = pe.AlternativaSeleccionada?.TextoAlternativa,
-                    EsCorrecta            = pe.EsCorrecta
+                    EsCorrecta            = pe.AlternativaSeleccionada?.EsCorrecta ?? false
                 });
             }
 
@@ -488,7 +483,7 @@ namespace SimulacroExamen.Controllers
         // ── GET /Examen/Configuracion ─────────────────────────────────
         public async Task<IActionResult> Configuracion()
         {
-            var usuario = await _db.Usuarios.FindAsync(UsuarioId);
+            var usuario = await _db.Estudiantes.FirstOrDefaultAsync(u => u.Id == CurrentUserId);
             if (usuario == null) return RedirectToAction(nameof(Index));
 
             var vm = new ConfiguracionViewModel
@@ -503,7 +498,7 @@ namespace SimulacroExamen.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Configuracion(ConfiguracionViewModel vm)
         {
-            var usuario = await _db.Usuarios.FindAsync(UsuarioId);
+            var usuario = await _db.Estudiantes.FirstOrDefaultAsync(u => u.Id == CurrentUserId);
             if (usuario == null) return RedirectToAction(nameof(Index));
 
             bool cambioContrasena = !string.IsNullOrWhiteSpace(vm.ContrasenaNueva);
@@ -570,7 +565,7 @@ namespace SimulacroExamen.Controllers
         {
             var examenes = await _db.Examenes
                 .Include(e => e.TipoExamen)
-                .Where(e => e.UsuarioId == UsuarioId && e.Completado)
+                .Where(e => e.UsuarioId == CurrentUserId && e.Completado)
                 .OrderByDescending(e => e.FechaFin)
                 .ToListAsync();
 
@@ -580,7 +575,7 @@ namespace SimulacroExamen.Controllers
         // ── GET /Examen/Sugerencias ───────────────────────────────────
         public async Task<IActionResult> Sugerencias()
         {
-            var uid = UsuarioId;
+            var uid = CurrentUserId;
             var mis = await _db.Sugerencias
                 .Where(s => s.UsuarioId == uid)
                 .OrderByDescending(s => s.FechaEnvio)
@@ -602,7 +597,7 @@ namespace SimulacroExamen.Controllers
 
             _db.Sugerencias.Add(new Sugerencia
             {
-                UsuarioId  = UsuarioId,
+                UsuarioId  = CurrentUserId,
                 Asunto     = asunto.Trim()[..Math.Min(100, asunto.Trim().Length)],
                 Mensaje    = mensaje.Trim()[..Math.Min(2000, mensaje.Trim().Length)],
                 FechaEnvio = DateTime.Now,

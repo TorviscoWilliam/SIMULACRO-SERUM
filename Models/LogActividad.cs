@@ -10,8 +10,8 @@ namespace SimulacroExamen.Models
 
         public int AdminId { get; set; }
 
-        [MaxLength(100)]
-        public string AdminNombre { get; set; } = string.Empty;
+        /// <summary>Navegación al admin. Reemplaza el campo desnormalizado AdminNombre.</summary>
+        public Usuario? Admin { get; set; }
 
         [MaxLength(100)]
         public string Accion { get; set; } = string.Empty;

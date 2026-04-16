@@ -68,9 +68,9 @@
 <!-- Características -->
 <div class="mb-3">
     <label class="form-label fw-semibold">Características <span class="text-danger">*</span></label>
-    <textarea id="previewCaracteristicas" name="Caracteristicas" class="form-control preview-trigger"
+    <textarea id="previewCaracteristicas" name="CaracteristicasTexto" class="form-control preview-trigger"
               rows="6" required
-              placeholder="Una característica por línea. Usa **texto** para negrita.&#10;Ej: Acceso **ilimitado** a simulacros.">@Model.Caracteristicas</textarea>
+              placeholder="Una característica por línea. Usa **texto** para negrita.&#10;Ej: Acceso **ilimitado** a simulacros.">@string.Join("\n", Model.Caracteristicas.OrderBy(c => c.Orden).Select(c => c.Texto))</textarea>
     <div class="form-text">
         Una característica por línea. Usa <code>**texto**</code> para resaltar en <strong>negrita</strong>.
     </div>

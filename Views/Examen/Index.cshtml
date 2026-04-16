@@ -365,11 +365,11 @@
                                     }
 
                                     <ul class="list-unstyled text-start mb-4 @(plan.EsPopular ? "mt-2" : "")">
-                                        @foreach (var feat in (plan.Caracteristicas ?? "").Split('\n').Where(f => !string.IsNullOrWhiteSpace(f)))
+                                        @foreach (var feat in plan.Caracteristicas.OrderBy(c => c.Orden))
                                         {
                                             <li class="d-flex align-items-start gap-2 mb-2">
                                                 <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                                <span>@Html.Raw(System.Text.RegularExpressions.Regex.Replace(feat.Trim(), @"\*\*(.+?)\*\*", "<strong>$1</strong>"))</span>
+                                                <span>@Html.Raw(System.Text.RegularExpressions.Regex.Replace(feat.Texto.Trim(), @"\*\*(.+?)\*\*", "<strong>$1</strong>"))</span>
                                             </li>
                                         }
                                     </ul>

@@ -181,6 +181,12 @@
                                 }
                                 else
                                 {
+                                    @if (u.PlanNombre != null)
+                                    {
+                                        <br/><span class="badge bg-secondary mt-1" title="Plan: @u.PlanNombre">
+                                            <i class="bi bi-tag me-1"></i>@u.PlanNombre
+                                        </span>
+                                    }
                                     <br/><span class="badge bg-success mt-1">
                                         <i class="bi bi-infinity me-1"></i>Sin límite
                                     </span>
@@ -207,14 +213,12 @@
                                 {
                                     @if (u.EsTrial)
                                     {
-                                        <form asp-action="ActivarAccesoCompleto" method="post" class="d-inline"
-                                              onsubmit="return confirm('¿Activar acceso completo para @u.NombreUsuario?')">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="id" value="@u.Id"/>
-                                            <button type="submit" class="btn btn-sm btn-warning" title="Dar acceso completo">
-                                                <i class="bi bi-unlock me-1"></i>Trial→Completo
-                                            </button>
-                                        </form>
+                                        <button type="button" class="btn btn-sm btn-warning"
+                                                data-bs-toggle="modal" data-bs-target="#modalActivarAcceso"
+                                                data-id="@u.Id" data-nombre="@u.NombreUsuario"
+                                                title="Dar acceso completo">
+                                            <i class="bi bi-unlock me-1"></i>Trial→Completo
+                                        </button>
                                     }
                                     else
                                     {
@@ -372,6 +376,46 @@
     </nav>
 }
 
+<!-- ── Modal: Activar Acceso Completo ────────────────────────── -->
+<div class="modal fade" id="modalActivarAcceso" tabindex="-1" aria-labelledby="modalActivarAccesoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h6 class="modal-title" id="modalActivarAccesoLabel">
+                    <i class="bi bi-unlock me-2"></i>Activar Acceso Completo
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form asp-action="ActivarAccesoCompleto" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="activarAccesoId" />
+                <div class="modal-body">
+                    <p class="mb-3 small">
+                        Estudiante: <strong id="activarAccesoNombre"></strong>
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Plan de Suscripción</label>
+                        <select name="planId" class="form-select form-select-sm">
+                            <option value="">— Sin plan específico —</option>
+                            @foreach (var plan in (IEnumerable<dynamic>)ViewBag.PlanesDisponibles)
+                            {
+                                <option value="@plan.Id">@plan.Nombre</option>
+                            }
+                        </select>
+                        <div class="form-text">Opcional. Puedes cambiar el plan después en Editar.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-warning">
+                        <i class="bi bi-unlock me-1"></i>Activar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
     // Filtro de búsqueda en tabla
@@ -391,6 +435,13 @@
             var modal = new bootstrap.Modal(document.getElementById('modalAjustarIntentos'));
             modal.show();
         });
+    });
+
+    // Modal activar acceso completo: poblar con id y nombre del estudiante
+    document.getElementById('modalActivarAcceso').addEventListener('show.bs.modal', function (e) {
+        var btn = e.relatedTarget;
+        document.getElementById('activarAccesoId').value             = btn.dataset.id;
+        document.getElementById('activarAccesoNombre').textContent   = btn.dataset.nombre;
     });
 </script>
 }

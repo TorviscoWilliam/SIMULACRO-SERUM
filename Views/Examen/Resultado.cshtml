@@ -2,11 +2,7 @@
 @{
     ViewData["Title"] = "Resultado del Examen";
     string badgeClass  = Model.Porcentaje >= 70 ? "bg-success" : Model.Porcentaje >= 50 ? "bg-warning" : "bg-danger";
-    string catMemeUrl  = Model.Porcentaje >= 70
-        ? "https://media.giphy.com/media/kkpcRessCvNyo/giphy.gif"
-        : Model.Porcentaje >= 50
-            ? "https://media.giphy.com/media/mEtSQlxqBtWWA/giphy.gif"
-            : "https://media.giphy.com/media/OPU6wzx8JrHna/giphy.gif";
+    string iconClass   = Model.Porcentaje >= 70 ? "bi-trophy-fill text-warning" : Model.Porcentaje >= 50 ? "bi-emoji-neutral text-warning" : "bi-emoji-frown text-danger";
     string mensajeMain = Model.Porcentaje >= 70 ? "¡Excelente resultado!" : Model.Porcentaje >= 50 ? "Buen intento, sigue practicando" : "Sigue esforzándote";
     string tituloExamen = !string.IsNullOrEmpty(Model.TipoExamenNombre) ? Model.TipoExamenNombre : "Examen";
 }
@@ -17,7 +13,7 @@
         <!-- Resumen -->
         <div class="card border-0 shadow mb-4">
             <div class="card-body p-4 text-center">
-                <img src="@catMemeUrl" class="mb-3 rounded-3" style="height:180px;object-fit:contain" alt="@mensajeMain" />
+                <i class="bi @iconClass mb-3 d-block" style="font-size:4rem"></i>
                 <span class="badge bg-info-subtle text-info border border-info-subtle mb-2">
                     <i class="bi bi-mortarboard me-1"></i>@tituloExamen
                 </span>

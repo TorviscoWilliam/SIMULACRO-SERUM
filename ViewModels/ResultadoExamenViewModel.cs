@@ -82,8 +82,7 @@ namespace SimulacroExamen.ViewModels
 
         /// <summary>
         /// true si la respuesta seleccionada fue la correcta.
-        /// Se calcula en ExamenController.Enviar() y se persiste en PreguntaExamen.EsCorrecta
-        /// para no tener que recalcular en cada consulta del historial.
+        /// Se deriva de AlternativaSeleccionada.EsCorrecta al consultar el resultado.
         /// </summary>
         public bool    EsCorrecta           { get; set; }
     }

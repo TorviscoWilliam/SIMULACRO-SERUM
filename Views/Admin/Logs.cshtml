@@ -43,7 +43,7 @@ else
                                 @log.Fecha.ToString("dd/MM/yyyy HH:mm:ss")
                             </td>
                             <td>
-                                <span class="fw-semibold">@log.AdminNombre</span>
+                                <span class="fw-semibold">@(log.Admin?.NombreUsuario ?? "—")</span>
                             </td>
                             <td>
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle">

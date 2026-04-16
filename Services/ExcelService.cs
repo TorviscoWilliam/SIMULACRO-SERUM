@@ -107,7 +107,8 @@ namespace SimulacroExamen.Services
             string[] headers = {
                 "ID", "Usuario", "Correo", "Rol",
                 "Fecha Creación", "Tiempo Registrado",
-                "Total Exámenes", "Mejor Puntaje", "Estado"
+                "Total Exámenes", "Mejor Puntaje", "Estado",
+                "Plan", "Tipo Acceso", "Vencimiento"
             };
 
             // Aplicar estilo a los encabezados (fondo oscuro, texto blanco, centrado)
@@ -136,12 +137,18 @@ namespace SimulacroExamen.Services
                 ws.Cell(row, 7).Value = u.TotalExamenes;
                 ws.Cell(row, 8).Value = u.MejorPuntaje;
                 ws.Cell(row, 9).Value = u.Activo ? "Activo" : "Inactivo";
+                // Columnas de suscripción (solo aplican a estudiantes)
+                ws.Cell(row, 10).Value = u.PlanNombre ?? (u.Rol == "Usuario" ? "Sin plan" : "—");
+                ws.Cell(row, 11).Value = u.Rol != "Usuario" ? "—" : (u.EsTrial ? "Trial" : "Completo");
+                ws.Cell(row, 12).Value = u.FechaVencimiento.HasValue
+                    ? u.FechaVencimiento.Value.ToString("dd/MM/yyyy")
+                    : (u.Rol == "Usuario" ? "Sin vencimiento" : "—");
 
                 // Filas alternas con fondo gris claro para mejorar legibilidad
                 if (i % 2 == 1)
                 {
                     ws.Row(row).Cells(1, headers.Length)
-                      .Style.Fill.BackgroundColor = XLColor.FromHtml("#ecf0f1");
+                        .Style.Fill.BackgroundColor = XLColor.FromHtml("#ecf0f1");
                 }
             }
 
