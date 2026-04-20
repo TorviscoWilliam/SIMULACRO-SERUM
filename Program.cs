@@ -328,6 +328,12 @@ static void MigrarEsquema(ApplicationDbContext context)
                    WHERE TABLE_NAME='Examenes' AND COLUMN_NAME='DuracionSegundos')
                ALTER TABLE Examenes ADD DuracionSegundos int NULL");
 
+        // Columna DuracionMinutos en TiposExamen (configurable por el admin)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='TiposExamen' AND COLUMN_NAME='DuracionMinutos')
+               ALTER TABLE TiposExamen ADD DuracionMinutos INT NULL");
+
         // Tabla CaracteristicasPlan (normalización de PlanesSuscripcion.Caracteristicas)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.TABLES

@@ -24,12 +24,26 @@
                         <span asp-validation-for="Nombre" class="text-danger small"></span>
                     </div>
 
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label asp-for="NumeroPreguntas" class="form-label fw-semibold"></label>
                         <input asp-for="NumeroPreguntas" type="number" min="1" max="200"
                                class="form-control"/>
                         <div class="form-text">Cantidad de preguntas aleatorias por examen.</div>
                         <span asp-validation-for="NumeroPreguntas" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-4">
+                        <label asp-for="DuracionMinutos" class="form-label fw-semibold"></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-clock"></i></span>
+                            <input asp-for="DuracionMinutos" type="number" min="1" max="600"
+                                   class="form-control" placeholder="Dejar vacío para calcular automáticamente"/>
+                            <span class="input-group-text">min</span>
+                        </div>
+                        <div class="form-text">
+                            Si lo dejas vacío, se asigna automáticamente: 20 preguntas = sin límite, 50 = 30 min, 100 = 60 min.
+                        </div>
+                        <span asp-validation-for="DuracionMinutos" class="text-danger small"></span>
                     </div>
 
                     <div class="d-flex gap-2">

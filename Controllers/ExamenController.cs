@@ -218,13 +218,17 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // Duración según cantidad de preguntas elegida
-            int? duracionSegundos = numPreguntas switch
-            {
-                50  => 30 * 60,   // 30 minutos
-                100 => 60 * 60,   // 60 minutos
-                _   => null       // 20 preguntas = sin límite de tiempo
-            };
+            // Duración: usa el valor configurado en TipoExamen si existe;
+            // si no, calcula automáticamente según el número de preguntas.
+            var tipo = await _db.TiposExamen.FindAsync(tipoExamenId);
+            int? duracionSegundos = tipo?.DuracionMinutos.HasValue == true
+                ? tipo.DuracionMinutos * 60
+                : numPreguntas switch
+                {
+                    50  => 30 * 60,
+                    100 => 60 * 60,
+                    _   => null
+                };
 
             var rng       = new Random();
             var mezcladas = preguntas.OrderBy(_ => rng.Next())

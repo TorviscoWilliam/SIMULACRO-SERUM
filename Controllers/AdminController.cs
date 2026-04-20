@@ -1034,6 +1034,7 @@ namespace SimulacroExamen.Controllers
 
             existing.Nombre          = tipo.Nombre;
             existing.NumeroPreguntas = tipo.NumeroPreguntas;
+            existing.DuracionMinutos = tipo.DuracionMinutos;
             await _db.SaveChangesAsync();
 
             TempData["Exito"] = $"Tipo '{existing.Nombre}' actualizado correctamente.";

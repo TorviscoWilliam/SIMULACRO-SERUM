@@ -17,6 +17,14 @@ namespace SimulacroExamen.Models
         [Display(Name = "N° de Preguntas por Examen")]
         public int NumeroPreguntas { get; set; } = 4;
 
+        /// <summary>
+        /// Duración en minutos para este tipo de examen.
+        /// Si es null, se calcula automáticamente según el número de preguntas.
+        /// </summary>
+        [Range(1, 600, ErrorMessage = "Debe ser entre 1 y 600 minutos")]
+        [Display(Name = "Duración (minutos)")]
+        public int? DuracionMinutos { get; set; }
+
         public ICollection<Pregunta> Preguntas { get; set; } = new List<Pregunta>();
         public ICollection<Examen> Examenes { get; set; } = new List<Examen>();
         public ICollection<UsuarioTipoExamen> UsuariosTipoExamen { get; set; } = new List<UsuarioTipoExamen>();
