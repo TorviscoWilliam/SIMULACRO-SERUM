@@ -76,10 +76,20 @@ namespace SimulacroExamen.Controllers
             // Login exitoso → limpiar intentos
             _loginIntentos.TryRemove(ip, out _);
 
-            // Generar token de sesión único → invalida cualquier sesión anterior
+            // Generar token de sesión único → invalida cualquier sesión anterior.
+            // Si por algún motivo el UPDATE falla (ej: columna SessionToken ausente
+            // en una BD con esquema desactualizado), no bloqueamos el login: el
+            // middleware de validación tolera el desajuste dejando pasar el request.
             var sessionToken = Guid.NewGuid().ToString();
-            usuario.SessionToken = sessionToken;
-            await _db.SaveChangesAsync();
+            try
+            {
+                usuario.SessionToken = sessionToken;
+                await _db.SaveChangesAsync();
+            }
+            catch
+            {
+                _db.Entry(usuario).State = EntityState.Unchanged;
+            }
 
             var claims = new List<Claim>
             {

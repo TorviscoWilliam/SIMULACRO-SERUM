@@ -33,7 +33,13 @@
         int _sugerenciasNuevas = 0;
         if (isAdmin && isAuthenticated)
         {
-            _sugerenciasNuevas = await _layoutDb.Sugerencias.CountAsync(s => !s.Leida);
+            // try/catch defensivo: si la tabla aún no existe o hay cualquier
+            // error de BD, el layout no debe tumbar la página entera.
+            try
+            {
+                _sugerenciasNuevas = await _layoutDb.Sugerencias.CountAsync(s => !s.Leida);
+            }
+            catch { _sugerenciasNuevas = 0; }
         }
     }
 
@@ -226,10 +232,16 @@
         }
 
         @{
-            // Banner de anuncio global (mantenimiento u otro aviso del admin)
-            var _anuncioGlobal = await _layoutDb.AnunciosGlobales
-                .Where(a => a.Activo)
-                .FirstOrDefaultAsync();
+            // Banner de anuncio global (mantenimiento u otro aviso del admin).
+            // try/catch: si la tabla aún no existe en Azure no debe romper el render.
+            SimulacroExamen.Models.AnuncioGlobal? _anuncioGlobal = null;
+            try
+            {
+                _anuncioGlobal = await _layoutDb.AnunciosGlobales
+                    .Where(a => a.Activo)
+                    .FirstOrDefaultAsync();
+            }
+            catch { _anuncioGlobal = null; }
         }
         @if (_anuncioGlobal != null)
         {
