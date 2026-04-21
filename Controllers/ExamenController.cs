@@ -117,6 +117,9 @@ namespace SimulacroExamen.Controllers
                 fechaVenc = usuarioData?.FechaVencimiento;
             }
             catch { /* columnas EsTrial/FechaVencimiento aún no existen en esta BD */ }
+
+            var examenesCompletados = await _db.Examenes
+                .CountAsync(e => e.UsuarioId == uid && e.Completado);
             bool vencida    = !esTrial && fechaVenc.HasValue && fechaVenc.Value < DateTime.Now;
             int  diasRestantes = (!esTrial && fechaVenc.HasValue && fechaVenc.Value >= DateTime.Now)
                                  ? (int)Math.Ceiling((fechaVenc.Value - DateTime.Now).TotalDays)
@@ -209,21 +212,32 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Tomar), new { id = examenExistente.Id });
 
             // ── Restricciones de modo trial y suscripción vencida ───
-            var usuarioTrial = await _db.Estudiantes
-                .Where(u => u.Id == uid)
-                .Select(u => new { u.EsTrial, u.IntentosExtra, u.FechaVencimiento })
-                .FirstOrDefaultAsync();
+            bool esTrialUser     = false;
+            int  intentosExtra   = 0;
+            DateTime? fechaVencUser = null;
+            try
+            {
+                var data = await _db.Estudiantes
+                    .Where(u => u.Id == uid)
+                    .Select(u => new { u.EsTrial, u.IntentosExtra, u.FechaVencimiento })
+                    .FirstOrDefaultAsync();
+                if (data != null)
+                {
+                    esTrialUser   = data.EsTrial;
+                    intentosExtra = data.IntentosExtra;
+                    fechaVencUser = data.FechaVencimiento;
+                }
+            }
+            catch { /* columnas aún no existen en esta BD; se continúa sin restricciones */ }
 
             // Bloquear si la suscripción está vencida
-            if (usuarioTrial?.EsTrial == false
-                && usuarioTrial.FechaVencimiento.HasValue
-                && usuarioTrial.FechaVencimiento.Value < DateTime.Now)
+            if (!esTrialUser && fechaVencUser.HasValue && fechaVencUser.Value < DateTime.Now)
             {
                 TempData["Error"] = "Tu suscripción ha vencido. Renuévala para continuar practicando.";
                 return RedirectToAction(nameof(Index));
             }
 
-            if (usuarioTrial?.EsTrial == true)
+            if (esTrialUser)
             {
                 var examenesTotal = await _db.Examenes
                     .CountAsync(e => e.UsuarioId == uid && e.Completado);
@@ -243,8 +257,6 @@ namespace SimulacroExamen.Controllers
             var intentosHoy = await _db.Examenes
                 .CountAsync(e => e.UsuarioId == uid && e.FechaInicio >= hoy);
 
-            var intentosExtra = usuarioTrial?.IntentosExtra ?? 0;
-
             if (intentosHoy >= 5 + intentosExtra)
             {
                 TempData["Error"] = $"Has alcanzado el límite de {5 + intentosExtra} exámenes diarios. Vuelve mañana.";
@@ -262,7 +274,7 @@ namespace SimulacroExamen.Controllers
             // numPreguntas: usa la opción seleccionada si viene > 0,
             // si no usa el valor configurado en el tipo, y en trial máx 20.
             int numPreguntas = numeroPreguntasOpcion > 0 ? numeroPreguntasOpcion : tipo.NumeroPreguntas;
-            if (usuarioTrial?.EsTrial == true)
+            if (esTrialUser)
                 numPreguntas = Math.Min(numPreguntas, 20);
 
             var preguntas = await _db.Preguntas
