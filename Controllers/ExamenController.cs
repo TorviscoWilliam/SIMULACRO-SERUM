@@ -312,32 +312,62 @@ namespace SimulacroExamen.Controllers
                 AltsOrden = p.Alternativas.OrderBy(_ => rng.Next()).Select(a => a.Id).ToList()
             }).ToList();
 
-            var examen = new Examen
-            {
-                UsuarioId        = uid,
-                TipoExamenId     = tipoExamenId,
-                FechaInicio      = DateTime.Now,
-                TotalPreguntas   = mezcladas.Count,
-                Completado       = false,
-                DuracionSegundos = duracionSegundos
-            };
+            // Paso 1: Guardar Examen + PreguntasExamen en UNA transacción.
+            // Se usa raw SQL para el INSERT de Examen para evitar que EF Core genere
+            // SQL con "DuracionSegundos" cuando esa columna aún no existe en la BD
+            // de producción (Azure con esquema anterior al despliegue actual).
+            var dbConn = _db.Database.GetDbConnection();
+            if (dbConn.State != System.Data.ConnectionState.Open)
+                await ((System.Data.Common.DbConnection)dbConn).OpenAsync();
 
-            await using (var tx = await _db.Database.BeginTransactionAsync())
+            int examenId;
+            await using (var dbTx = await ((System.Data.Common.DbConnection)dbConn).BeginTransactionAsync())
             {
-                _db.Examenes.Add(examen);
-                await _db.SaveChangesAsync();
+                // INSERT solo con columnas que existen en todas las versiones del esquema
+                using (var cmd = dbConn.CreateCommand())
+                {
+                    cmd.Transaction = dbTx;
+                    cmd.CommandText =
+                        "INSERT INTO Examenes (UsuarioId, TipoExamenId, FechaInicio, TotalPreguntas, Completado) " +
+                        "VALUES (@uid, @tipo, @fecha, @total, 0); " +
+                        "SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
+                    var p1 = cmd.CreateParameter(); p1.ParameterName = "@uid";   p1.Value = uid;             cmd.Parameters.Add(p1);
+                    var p2 = cmd.CreateParameter(); p2.ParameterName = "@tipo";  p2.Value = tipoExamenId;    cmd.Parameters.Add(p2);
+                    var p3 = cmd.CreateParameter(); p3.ParameterName = "@fecha"; p3.Value = DateTime.Now;    cmd.Parameters.Add(p3);
+                    var p4 = cmd.CreateParameter(); p4.ParameterName = "@total"; p4.Value = mezcladas.Count; cmd.Parameters.Add(p4);
+
+                    examenId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                }
+
+                // Fijar DuracionSegundos en UPDATE separado — si la columna no existe, se ignora
+                if (duracionSegundos.HasValue)
+                {
+                    try
+                    {
+                        using var durCmd = dbConn.CreateCommand();
+                        durCmd.Transaction = dbTx;
+                        durCmd.CommandText = "UPDATE Examenes SET DuracionSegundos = @dur WHERE Id = @id";
+                        var dp1 = durCmd.CreateParameter(); dp1.ParameterName = "@dur"; dp1.Value = duracionSegundos.Value; durCmd.Parameters.Add(dp1);
+                        var dp2 = durCmd.CreateParameter(); dp2.ParameterName = "@id";  dp2.Value = examenId; durCmd.Parameters.Add(dp2);
+                        await durCmd.ExecuteNonQueryAsync();
+                    }
+                    catch { /* DuracionSegundos aún no existe en esta BD */ }
+                }
+
+                // INSERT PreguntasExamen usando EF Core en la misma transacción
+                _db.Database.UseTransaction(dbTx);
                 foreach (var item in preguntasConOrden)
                 {
                     _db.PreguntasExamen.Add(new PreguntaExamen
                     {
-                        ExamenId   = examen.Id,
+                        ExamenId   = examenId,
                         PreguntaId = item.Pregunta.Id,
                         Orden      = item.Orden
                     });
                 }
                 await _db.SaveChangesAsync();
-                await tx.CommitAsync();
+                await dbTx.CommitAsync();
             }
 
             // Paso 2: intentar persistir OrdenesAlternativaExamen en una operación
@@ -348,7 +378,7 @@ namespace SimulacroExamen.Controllers
             try
             {
                 var peIds = await _db.PreguntasExamen
-                    .Where(pe => pe.ExamenId == examen.Id)
+                    .Where(pe => pe.ExamenId == examenId)
                     .OrderBy(pe => pe.Orden)
                     .Select(pe => pe.Id)
                     .ToListAsync();
@@ -370,9 +400,6 @@ namespace SimulacroExamen.Controllers
             }
             catch
             {
-                // Tabla OrdenesAlternativaExamen aún no existe: limpiar los
-                // OrdenAlternativaExamen que quedaron trackeados en memoria
-                // para que posteriores SaveChangesAsync del mismo contexto no fallen.
                 var pendientes = _db.ChangeTracker.Entries<OrdenAlternativaExamen>()
                     .Where(e => e.State == EntityState.Added)
                     .ToList();
@@ -380,7 +407,7 @@ namespace SimulacroExamen.Controllers
                     entry.State = EntityState.Detached;
             }
 
-            return RedirectToAction(nameof(Tomar), new { id = examen.Id });
+            return RedirectToAction(nameof(Tomar), new { id = examenId });
         }
 
         // ── POST /Examen/GuardarRespuesta (AJAX) ─────────────────────
