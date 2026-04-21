@@ -258,7 +258,14 @@ namespace SimulacroExamen.Controllers
                                      .Take(Math.Min(numPreguntas, preguntas.Count))
                                      .ToList();
 
-            await using var tx = await _db.Database.BeginTransactionAsync();
+            // Paso 1: guardar Examen + PreguntasExamen en UNA transacción.
+            // Si algo falla aquí, hacemos rollback y no se crea nada.
+            var preguntasConOrden = mezcladas.Select((p, i) => new
+            {
+                Pregunta  = p,
+                Orden     = i + 1,
+                AltsOrden = p.Alternativas.OrderBy(_ => rng.Next()).Select(a => a.Id).ToList()
+            }).ToList();
 
             var examen = new Examen
             {
@@ -270,32 +277,29 @@ namespace SimulacroExamen.Controllers
                 DuracionSegundos = duracionSegundos
             };
 
-            _db.Examenes.Add(examen);
-            await _db.SaveChangesAsync();
-
-            // Guardar el orden aleatorio de alternativas por pregunta.
-            // Se hace en dos pasos: primero PreguntasExamen (siempre), luego
-            // OrdenesAlternativaExamen en un try/catch por si la tabla aún no existe
-            // en la BD (Azure puede estar corriendo una versión anterior del esquema).
-            var preguntasConOrden = mezcladas.Select((p, i) => new
+            await using (var tx = await _db.Database.BeginTransactionAsync())
             {
-                Pregunta  = p,
-                Orden     = i + 1,
-                AltsOrden = p.Alternativas.OrderBy(_ => rng.Next()).Select(a => a.Id).ToList()
-            }).ToList();
+                _db.Examenes.Add(examen);
+                await _db.SaveChangesAsync();
 
-            foreach (var item in preguntasConOrden)
-            {
-                _db.PreguntasExamen.Add(new PreguntaExamen
+                foreach (var item in preguntasConOrden)
                 {
-                    ExamenId   = examen.Id,
-                    PreguntaId = item.Pregunta.Id,
-                    Orden      = item.Orden
-                });
+                    _db.PreguntasExamen.Add(new PreguntaExamen
+                    {
+                        ExamenId   = examen.Id,
+                        PreguntaId = item.Pregunta.Id,
+                        Orden      = item.Orden
+                    });
+                }
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
             }
-            await _db.SaveChangesAsync();
 
-            // Intentar persistir el orden de alternativas (tabla puede no existir en Azure)
+            // Paso 2: intentar persistir OrdenesAlternativaExamen en una operación
+            // INDEPENDIENTE, fuera de la transacción anterior. Si la tabla no existe
+            // en el esquema desplegado (Azure con versión previa), SaveChangesAsync
+            // falla SIN abortar el examen ya confirmado. Limpiamos el tracker para
+            // que el DbContext no quede en estado inconsistente.
             try
             {
                 var peIds = await _db.PreguntasExamen
@@ -321,11 +325,16 @@ namespace SimulacroExamen.Controllers
             }
             catch
             {
-                // Tabla OrdenesAlternativaExamen aún no existe: el examen
-                // funciona igual, Tomar muestra las alternativas en orden original.
+                // Tabla OrdenesAlternativaExamen aún no existe: limpiar los
+                // OrdenAlternativaExamen que quedaron trackeados en memoria
+                // para que posteriores SaveChangesAsync del mismo contexto no fallen.
+                var pendientes = _db.ChangeTracker.Entries<OrdenAlternativaExamen>()
+                    .Where(e => e.State == EntityState.Added)
+                    .ToList();
+                foreach (var entry in pendientes)
+                    entry.State = EntityState.Detached;
             }
 
-            await tx.CommitAsync();
             return RedirectToAction(nameof(Tomar), new { id = examen.Id });
         }
 

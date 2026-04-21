@@ -29,12 +29,24 @@ namespace SimulacroExamen.Middleware
                 // que no tienen el claim SessionToken; simplemente las dejamos pasar esta vez)
                 if (idClaim != null && tokenClaim != null && int.TryParse(idClaim, out var userId))
                 {
-                    var tokenEnBd = await db.Usuarios
-                        .Where(u => u.Id == userId)
-                        .Select(u => u.SessionToken)
-                        .FirstOrDefaultAsync();
+                    // try/catch defensivo: si la columna SessionToken no existe en el
+                    // esquema desplegado o hay un fallo transitorio de BD, dejamos pasar
+                    // el request en lugar de devolver 500 / romper el pipeline.
+                    string? tokenEnBd = null;
+                    bool consultaOk = true;
+                    try
+                    {
+                        tokenEnBd = await db.Usuarios
+                            .Where(u => u.Id == userId)
+                            .Select(u => u.SessionToken)
+                            .FirstOrDefaultAsync();
+                    }
+                    catch
+                    {
+                        consultaOk = false;
+                    }
 
-                    if (tokenEnBd != tokenClaim)
+                    if (consultaOk && tokenEnBd != tokenClaim)
                     {
                         // La sesión fue invalidada por un login desde otro dispositivo
                         await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
