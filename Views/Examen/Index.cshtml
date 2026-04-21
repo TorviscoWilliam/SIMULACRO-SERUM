@@ -299,6 +299,8 @@
                                             data-tipoid="@tipo.Id"
                                             data-nombre="@tipo.Nombre"
                                             data-disponibles="@numPregs"
+                                            data-numpreguntas="@tipo.NumeroPreguntas"
+                                            data-duracionminutos="@(tipo.DuracionMinutos ?? 0)"
                                             data-duraciones="@duracionesJson"
                                             data-bs-toggle="modal"
                                             data-bs-target="#modalModoExamen">
@@ -418,86 +420,53 @@
 </div>
 }
 
-<!-- Modal: selección de modo de examen -->
+<!-- Modal: iniciar examen -->
 <div class="modal fade" id="modalModoExamen" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header border-0 pb-0">
+            <div class="modal-header border-0 pb-2">
                 <h5 class="modal-title fw-bold">
-                    <i class="bi bi-sliders me-2 text-success"></i>
-                    Configurar Examen — <span id="modoNombreTipo"></span>
+                    <i class="bi bi-play-circle me-2 text-success"></i>
+                    <span id="modoNombreTipo"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body pt-3">
-                <p class="text-muted small mb-3">Elige la cantidad de preguntas y la duración:</p>
-                <div class="row g-3" id="modoOpciones">
-
-                    <!-- Opción 20 -->
-                    <div class="col-12">
-                        <label class="d-block cursor-pointer modo-card" data-num="20">
-                            <input type="radio" name="modoExamen" value="20" class="d-none" checked />
-                            <div class="card border-2 border-success h-100 p-3 d-flex flex-row align-items-center gap-3">
-                                <div class="text-success" style="font-size:2rem"><i class="bi bi-infinity"></i></div>
-                                <div class="flex-grow-1">
-                                    <div class="fw-bold">20 preguntas</div>
-                                    <div class="text-muted small">Sin límite de tiempo — practica a tu ritmo</div>
-                                </div>
-                                <span class="badge bg-success">Seleccionado</span>
-                            </div>
-                        </label>
-                    </div>
-
-                    <!-- Opción 50 -->
-                    <div class="col-12 modo-wrapper" id="wrapper50">
-                        <label class="d-block cursor-pointer modo-card" data-num="50">
-                            <input type="radio" name="modoExamen" value="50" class="d-none" />
-                            <div class="card border-2 border-transparent h-100 p-3 d-flex flex-row align-items-center gap-3">
-                                <div class="text-warning" style="font-size:2rem"><i class="bi bi-clock"></i></div>
-                                <div class="flex-grow-1">
-                                    <div class="fw-bold">50 preguntas</div>
-                                    <div class="text-muted small">Tiempo límite: <strong>30 minutos</strong></div>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-
-                    <!-- Opción 100 -->
-                    <div class="col-12 modo-wrapper" id="wrapper100">
-                        <label class="d-block cursor-pointer modo-card" data-num="100">
-                            <input type="radio" name="modoExamen" value="100" class="d-none" />
-                            <div class="card border-2 border-transparent h-100 p-3 d-flex flex-row align-items-center gap-3">
-                                <div class="text-danger" style="font-size:2rem"><i class="bi bi-stopwatch-fill"></i></div>
-                                <div class="flex-grow-1">
-                                    <div class="fw-bold">100 preguntas</div>
-                                    <div class="text-muted small">Tiempo límite: <strong>60 minutos</strong></div>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-
+            <div class="modal-body pt-2">
+                <!-- Resumen del examen -->
+                <div class="alert alert-light border d-flex align-items-center gap-2 py-2 mb-3">
+                    <i class="bi bi-journal-check text-primary fs-5"></i>
+                    <span id="infoPreguntas" class="small fw-semibold"></span>
                 </div>
 
-                <div id="avisoPreguntas" class="alert alert-warning small mt-3 d-none">
-                    <i class="bi bi-exclamation-triangle me-1"></i>
-                    <span id="avisoText"></span>
+                <!-- Duraciones configuradas por el admin -->
+                <p class="text-muted small mb-2 fw-semibold">
+                    <i class="bi bi-clock me-1"></i>Duración del examen:
+                </p>
+
+                <!-- Tarjetas seleccionables (si hay opciones configuradas) -->
+                <div id="listaDuraciones" class="row g-2 mb-2"></div>
+
+                <!-- Duración fija del tipo (si no hay opciones pero sí DuracionMinutos) -->
+                <div id="duracionFija" class="d-none">
+                    <div class="card border-success border-2 p-3 text-center">
+                        <i class="bi bi-clock-fill text-success mb-1 d-block fs-4"></i>
+                        <div class="fw-semibold" id="textoDuracionFija"></div>
+                    </div>
                 </div>
 
-                <!-- Sección de opciones de duración (solo si el tipo tiene opciones configuradas) -->
-                <div id="seccionDuraciones" class="d-none mt-3">
-                    <hr class="my-2"/>
-                    <p class="text-muted small mb-2 fw-semibold">
-                        <i class="bi bi-clock me-1"></i>Elige la duración:
-                    </p>
-                    <div id="listaDuraciones" class="row g-2"></div>
+                <!-- Sin límite (si no hay nada configurado) -->
+                <div id="duracionLibre" class="d-none">
+                    <div class="card border-success border-2 p-3 text-center">
+                        <i class="bi bi-infinity text-success mb-1 d-block fs-4"></i>
+                        <div class="fw-semibold small">Sin límite de tiempo — practica a tu ritmo</div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer border-0">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <form id="formIniciar" asp-action="IniciarExamen" method="post">
                     @Html.AntiForgeryToken()
-                    <input type="hidden" id="inputTipoId"            name="tipoExamenId"              value="0" />
-                    <input type="hidden" id="inputNumPregs"           name="numPreguntas"              value="20" />
+                    <input type="hidden" id="inputTipoId"               name="tipoExamenId"              value="0" />
                     <input type="hidden" id="inputDuracionPersonalizada" name="duracionMinutosPersonalizada" value="0" />
                     <button type="submit" class="btn btn-success px-4">
                         <i class="bi bi-play-fill me-2"></i>Comenzar
@@ -553,120 +522,80 @@
     // Poblar modal al abrir
     document.querySelectorAll('.btn-iniciar').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            const tipoId      = this.dataset.tipoid;
-            const nombre      = this.dataset.nombre;
-            const disponibles = parseInt(this.dataset.disponibles);
-            const duraciones  = JSON.parse(this.dataset.duraciones || '[]');
+            const tipoId       = this.dataset.tipoid;
+            const nombre       = this.dataset.nombre;
+            const disponibles  = parseInt(this.dataset.disponibles) || 0;
+            const numPreguntas = parseInt(this.dataset.numpreguntas) || disponibles;
+            const durFija      = parseInt(this.dataset.duracionminutos) || 0;
+            const duraciones   = JSON.parse(this.dataset.duraciones || '[]');
 
             document.getElementById('modoNombreTipo').textContent = nombre;
-            document.getElementById('inputTipoId').value = tipoId;
+            document.getElementById('inputTipoId').value          = tipoId;
             document.getElementById('inputDuracionPersonalizada').value = '0';
 
-            // Mostrar/ocultar opciones según disponibilidad
-            ['50', '100'].forEach(function (n) {
-                const wrapper = document.getElementById('wrapper' + n);
-                const num     = parseInt(n);
-                const card    = wrapper.querySelector('.card');
-                const radio   = wrapper.querySelector('input[type=radio]');
-                if (disponibles < num) {
-                    wrapper.style.opacity = '0.45';
-                    wrapper.style.pointerEvents = 'none';
-                    radio.disabled = true;
-                    card.classList.add('border-secondary-subtle');
-                } else {
-                    wrapper.style.opacity = '';
-                    wrapper.style.pointerEvents = '';
-                    radio.disabled = false;
-                }
-            });
+            // Info preguntas
+            const real = Math.min(numPreguntas, disponibles);
+            document.getElementById('infoPreguntas').textContent =
+                real + ' preguntas' + (disponibles < numPreguntas ? ' (máximo disponible)' : '');
 
-            // Aviso si hay pocas preguntas
-            const aviso = document.getElementById('avisoPreguntas');
-            const avisoText = document.getElementById('avisoText');
-            const selNum = parseInt(document.querySelector('input[name="modoExamen"]:checked')?.value ?? '20');
-            if (disponibles < selNum) {
-                aviso.classList.remove('d-none');
-                avisoText.textContent = 'Solo hay ' + disponibles + ' preguntas disponibles. El examen se realizará con todas ellas.';
-            } else {
-                aviso.classList.add('d-none');
-            }
+            // Limpiar secciones de duración
+            const lista       = document.getElementById('listaDuraciones');
+            const divFija     = document.getElementById('duracionFija');
+            const divLibre    = document.getElementById('duracionLibre');
+            lista.innerHTML   = '';
+            divFija.classList.add('d-none');
+            divLibre.classList.add('d-none');
 
-            // Opciones de duración personalizadas
-            const seccion = document.getElementById('seccionDuraciones');
-            const lista   = document.getElementById('listaDuraciones');
-            lista.innerHTML = '';
             if (duraciones.length > 0) {
-                seccion.classList.remove('d-none');
+                // Opciones configuradas por el admin — tarjetas seleccionables
                 duraciones.forEach(function (d, i) {
-                    const col = document.createElement('div');
+                    const col  = document.createElement('div');
                     col.className = 'col-6 col-sm-4';
-                    col.innerHTML =
-                        '<label class="d-block cursor-pointer duracion-card" data-minutos="' + d.minutos + '">' +
-                        '<div class="card border-2 ' + (i === 0 ? 'border-info' : 'border-transparent') + ' p-2 text-center h-100" style="cursor:pointer">' +
-                        '<i class="bi bi-hourglass-split text-info mb-1 d-block"></i>' +
-                        '<div class="fw-semibold small">' + d.etiqueta + '</div>' +
-                        (i === 0 ? '<span class="badge bg-info mt-1">Seleccionado</span>' : '') +
-                        '</div></label>';
-                    lista.appendChild(col);
-                });
-                if (duraciones.length > 0)
-                    document.getElementById('inputDuracionPersonalizada').value = duraciones[0].minutos;
 
-                lista.querySelectorAll('.duracion-card').forEach(function (card) {
+                    const card = document.createElement('div');
+                    card.className = 'duracion-card card border-2 p-2 text-center h-100 ' +
+                                     (i === 0 ? 'border-success bg-success bg-opacity-10' : 'border-light');
+                    card.style.cursor  = 'pointer';
+                    card.dataset.minutos = String(d.minutos);
+                    card.innerHTML =
+                        '<i class="bi bi-hourglass-split ' + (i === 0 ? 'text-success' : 'text-muted') + ' mb-1 d-block fs-5"></i>' +
+                        '<div class="fw-semibold small">' + d.etiqueta + '</div>' +
+                        (i === 0 ? '<span class="badge bg-success mt-1 sel-badge">Seleccionado</span>' : '');
+
                     card.addEventListener('click', function () {
+                        // Deseleccionar todas
                         lista.querySelectorAll('.duracion-card').forEach(function (c) {
-                            const inner = c.querySelector('.card');
-                            inner.className = inner.className.replace('border-info', 'border-transparent');
-                            const badge = c.querySelector('.badge');
-                            if (badge) badge.remove();
+                            c.classList.remove('border-success', 'bg-success', 'bg-opacity-10');
+                            c.classList.add('border-light');
+                            c.querySelector('i').classList.replace('text-success', 'text-muted');
+                            const b = c.querySelector('.sel-badge');
+                            if (b) b.remove();
                         });
-                        const inner = this.querySelector('.card');
-                        inner.className = inner.className.replace('border-transparent', 'border-info');
+                        // Seleccionar esta
+                        this.classList.remove('border-light');
+                        this.classList.add('border-success', 'bg-success', 'bg-opacity-10');
+                        this.querySelector('i').classList.replace('text-muted', 'text-success');
                         const b = document.createElement('span');
-                        b.className = 'badge bg-info mt-1';
+                        b.className = 'badge bg-success mt-1 sel-badge';
                         b.textContent = 'Seleccionado';
-                        inner.appendChild(b);
+                        this.appendChild(b);
                         document.getElementById('inputDuracionPersonalizada').value = this.dataset.minutos;
                     });
+
+                    col.appendChild(card);
+                    lista.appendChild(col);
                 });
+                // Primera opción seleccionada por defecto
+                document.getElementById('inputDuracionPersonalizada').value = String(duraciones[0].minutos);
+
+            } else if (durFija > 0) {
+                // Duración fija configurada en el tipo
+                divFija.classList.remove('d-none');
+                document.getElementById('textoDuracionFija').textContent = durFija + ' minutos';
             } else {
-                seccion.classList.add('d-none');
+                // Sin límite
+                divLibre.classList.remove('d-none');
             }
-
-            // Reset selección a 20
-            seleccionarModo(20);
-        });
-    });
-
-    // Selección visual de modo
-    function seleccionarModo(num) {
-        document.querySelectorAll('.modo-card').forEach(function (lbl) {
-            const n    = parseInt(lbl.dataset.num);
-            const card = lbl.querySelector('.card');
-            const badge = lbl.querySelector('.badge');
-            const radio = lbl.querySelector('input[type=radio]');
-            if (n === num) {
-                radio.checked = true;
-                card.className = card.className.replace('border-transparent', 'border-success');
-                if (!badge) {
-                    const b = document.createElement('span');
-                    b.className = 'badge bg-success';
-                    b.textContent = 'Seleccionado';
-                    card.appendChild(b);
-                }
-            } else {
-                radio.checked = false;
-                card.className = card.className.replace('border-success', 'border-transparent');
-                if (badge) badge.remove();
-            }
-        });
-        document.getElementById('inputNumPregs').value = num;
-    }
-
-    document.querySelectorAll('.modo-card').forEach(function (lbl) {
-        lbl.addEventListener('click', function () {
-            if (this.querySelector('input[type=radio]')?.disabled) return;
-            seleccionarModo(parseInt(this.dataset.num));
         });
     });
 

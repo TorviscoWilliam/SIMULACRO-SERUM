@@ -159,11 +159,8 @@ namespace SimulacroExamen.Controllers
         // ── POST /Examen/IniciarExamen ───────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> IniciarExamen(int tipoExamenId, int numPreguntas = 20, int duracionMinutosPersonalizada = 0)
+        public async Task<IActionResult> IniciarExamen(int tipoExamenId, int duracionMinutosPersonalizada = 0)
         {
-            if (numPreguntas != 20 && numPreguntas != 50 && numPreguntas != 100)
-                numPreguntas = 20;
-
             var uid = CurrentUserId;
 
             // Verificar que el usuario tiene acceso a este tipo
@@ -209,8 +206,8 @@ namespace SimulacroExamen.Controllers
                     return RedirectToAction(nameof(Index));
                 }
 
-                // Solo 20 preguntas en modo trial
-                numPreguntas = 20;
+                // En modo trial siempre 20 preguntas máximo
+                duracionMinutosPersonalizada = 0; // forzar sin duración personalizada en trial
             }
 
             // Límite de 5 exámenes por día (+ intentos extra asignados por admin)
@@ -226,6 +223,19 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
+            // Tipo de examen: NumeroPreguntas viene de la configuración del admin, no del form.
+            var tipo = await _db.TiposExamen.FindAsync(tipoExamenId);
+            if (tipo == null)
+            {
+                TempData["Error"] = "Tipo de examen no encontrado.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // En modo trial, limitar a 20 preguntas
+            int numPreguntas = (usuarioTrial?.EsTrial == true)
+                ? Math.Min(tipo.NumeroPreguntas, 20)
+                : tipo.NumeroPreguntas;
+
             var preguntas = await _db.Preguntas
                 .Where(p => p.Activo && p.TipoExamenId == tipoExamenId)
                 .Include(p => p.Alternativas)
@@ -238,20 +248,14 @@ namespace SimulacroExamen.Controllers
             }
 
             // Duración: 1) personalizada elegida por el estudiante,
-            // 2) fija del TipoExamen, 3) calculada por número de preguntas.
-            var tipo = await _db.TiposExamen.FindAsync(tipoExamenId);
+            // 2) fija del TipoExamen, 3) sin límite.
             int? duracionSegundos;
             if (duracionMinutosPersonalizada > 0)
                 duracionSegundos = duracionMinutosPersonalizada * 60;
-            else if (tipo?.DuracionMinutos.HasValue == true)
+            else if (tipo.DuracionMinutos.HasValue)
                 duracionSegundos = tipo.DuracionMinutos * 60;
             else
-                duracionSegundos = numPreguntas switch
-                {
-                    50  => 30 * 60,
-                    100 => 60 * 60,
-                    _   => null
-                };
+                duracionSegundos = null;
 
             var rng       = new Random();
             var mezcladas = preguntas.OrderBy(_ => rng.Next())
