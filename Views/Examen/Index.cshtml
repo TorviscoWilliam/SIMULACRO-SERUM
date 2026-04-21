@@ -293,7 +293,12 @@
                                     var duracionesJson = System.Text.Json.JsonSerializer.Serialize(
                                         tipo.OpcionesDuracion
                                             .OrderBy(o => o.Orden)
-                                            .Select(o => new { id = o.Id, etiqueta = o.Etiqueta, minutos = o.DuracionMinutos })
+                                            .Select(o => new {
+                                                id = o.Id,
+                                                etiqueta = o.Etiqueta,
+                                                minutos = o.DuracionMinutos,
+                                                preguntas = o.NumeroPreguntas > 0 ? o.NumeroPreguntas : tipo.NumeroPreguntas
+                                            })
                                     );
                                     <button type="button" class="btn btn-success w-100 btn-iniciar"
                                             data-tipoid="@tipo.Id"
@@ -468,6 +473,7 @@
                     @Html.AntiForgeryToken()
                     <input type="hidden" id="inputTipoId"               name="tipoExamenId"              value="0" />
                     <input type="hidden" id="inputDuracionPersonalizada" name="duracionMinutosPersonalizada" value="0" />
+                    <input type="hidden" id="inputNumeroPreguntasOpcion" name="numeroPreguntasOpcion"     value="0" />
                     <button type="submit" class="btn btn-success px-4">
                         <i class="bi bi-play-fill me-2"></i>Comenzar
                     </button>
@@ -520,6 +526,12 @@
     }
 
     // Poblar modal al abrir
+    function setInfoPreguntas(preguntas, disponibles) {
+        const real = Math.min(preguntas, disponibles);
+        document.getElementById('infoPreguntas').textContent =
+            real + ' preguntas' + (disponibles < preguntas ? ' (máximo disponible)' : '');
+    }
+
     document.querySelectorAll('.btn-iniciar').forEach(function (btn) {
         btn.addEventListener('click', function () {
             const tipoId       = this.dataset.tipoid;
@@ -532,17 +544,17 @@
             document.getElementById('modoNombreTipo').textContent = nombre;
             document.getElementById('inputTipoId').value          = tipoId;
             document.getElementById('inputDuracionPersonalizada').value = '0';
+            document.getElementById('inputNumeroPreguntasOpcion').value = '0';
 
-            // Info preguntas
-            const real = Math.min(numPreguntas, disponibles);
-            document.getElementById('infoPreguntas').textContent =
-                real + ' preguntas' + (disponibles < numPreguntas ? ' (máximo disponible)' : '');
+            // Info preguntas inicial
+            const pregsInicial = duraciones.length > 0 ? duraciones[0].preguntas : numPreguntas;
+            setInfoPreguntas(pregsInicial, disponibles);
 
             // Limpiar secciones de duración
-            const lista       = document.getElementById('listaDuraciones');
-            const divFija     = document.getElementById('duracionFija');
-            const divLibre    = document.getElementById('duracionLibre');
-            lista.innerHTML   = '';
+            const lista   = document.getElementById('listaDuraciones');
+            const divFija  = document.getElementById('duracionFija');
+            const divLibre = document.getElementById('duracionLibre');
+            lista.innerHTML = '';
             divFija.classList.add('d-none');
             divLibre.classList.add('d-none');
 
@@ -555,11 +567,22 @@
                     const card = document.createElement('div');
                     card.className = 'duracion-card card border-2 p-2 text-center h-100 ' +
                                      (i === 0 ? 'border-success bg-success bg-opacity-10' : 'border-light');
-                    card.style.cursor  = 'pointer';
-                    card.dataset.minutos = String(d.minutos);
+                    card.style.cursor = 'pointer';
+                    card.dataset.minutos   = String(d.minutos);
+                    card.dataset.preguntas = String(d.preguntas);
+
+                    const durTexto = d.minutos === 0 ? 'Sin tiempo' : d.minutos + ' min';
+                    const durBadgeClass = d.minutos === 0
+                        ? 'bg-success-subtle text-success border border-success-subtle'
+                        : 'bg-info-subtle text-info border border-info-subtle';
+
                     card.innerHTML =
                         '<i class="bi bi-hourglass-split ' + (i === 0 ? 'text-success' : 'text-muted') + ' mb-1 d-block fs-5"></i>' +
                         '<div class="fw-semibold small">' + d.etiqueta + '</div>' +
+                        '<div class="mt-1">' +
+                            '<span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">' + d.preguntas + ' pregs</span>' +
+                            '<span class="badge ' + durBadgeClass + '">' + durTexto + '</span>' +
+                        '</div>' +
                         (i === 0 ? '<span class="badge bg-success mt-1 sel-badge">Seleccionado</span>' : '');
 
                     card.addEventListener('click', function () {
@@ -575,11 +598,14 @@
                         this.classList.remove('border-light');
                         this.classList.add('border-success', 'bg-success', 'bg-opacity-10');
                         this.querySelector('i').classList.replace('text-muted', 'text-success');
-                        const b = document.createElement('span');
-                        b.className = 'badge bg-success mt-1 sel-badge';
-                        b.textContent = 'Seleccionado';
-                        this.appendChild(b);
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-success mt-1 sel-badge';
+                        badge.textContent = 'Seleccionado';
+                        this.appendChild(badge);
+
                         document.getElementById('inputDuracionPersonalizada').value = this.dataset.minutos;
+                        document.getElementById('inputNumeroPreguntasOpcion').value  = this.dataset.preguntas;
+                        setInfoPreguntas(parseInt(this.dataset.preguntas), disponibles);
                     });
 
                     col.appendChild(card);
@@ -587,13 +613,16 @@
                 });
                 // Primera opción seleccionada por defecto
                 document.getElementById('inputDuracionPersonalizada').value = String(duraciones[0].minutos);
+                document.getElementById('inputNumeroPreguntasOpcion').value  = String(duraciones[0].preguntas);
 
             } else if (durFija > 0) {
-                // Duración fija configurada en el tipo
+                // Duración fija configurada en el tipo (sin opciones seleccionables)
+                setInfoPreguntas(numPreguntas, disponibles);
                 divFija.classList.remove('d-none');
                 document.getElementById('textoDuracionFija').textContent = durFija + ' minutos';
             } else {
-                // Sin límite
+                // Sin límite de tiempo
+                setInfoPreguntas(numPreguntas, disponibles);
                 divLibre.classList.remove('d-none');
             }
         });

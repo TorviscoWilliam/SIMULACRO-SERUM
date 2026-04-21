@@ -334,6 +334,12 @@ static void MigrarEsquema(ApplicationDbContext context)
                    WHERE TABLE_NAME='TiposExamen' AND COLUMN_NAME='DuracionMinutos')
                ALTER TABLE TiposExamen ADD DuracionMinutos INT NULL");
 
+        // Columna NumeroPreguntas en TiposExamen (bases existentes sin esta columna)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='TiposExamen' AND COLUMN_NAME='NumeroPreguntas')
+               ALTER TABLE TiposExamen ADD NumeroPreguntas INT NOT NULL DEFAULT 20");
+
         // Tabla CaracteristicasPlan (normalización de PlanesSuscripcion.Caracteristicas)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.TABLES
@@ -509,12 +515,19 @@ Participa en **sorteos exclusivos.**',
                    Id              INT IDENTITY(1,1) PRIMARY KEY,
                    TipoExamenId    INT            NOT NULL,
                    Etiqueta        NVARCHAR(100)  NOT NULL,
-                   DuracionMinutos INT            NOT NULL,
+                   DuracionMinutos INT            NOT NULL DEFAULT 0,
+                   NumeroPreguntas INT            NOT NULL DEFAULT 0,
                    Orden           INT            NOT NULL DEFAULT 0,
                    CONSTRAINT FK_OpcionesDuracion_TiposExamen
                        FOREIGN KEY (TipoExamenId)
                        REFERENCES TiposExamen(Id) ON DELETE CASCADE
                )");
+
+        // Columna NumeroPreguntas en OpcionesDuracion (bases ya creadas)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='OpcionesDuracion' AND COLUMN_NAME='NumeroPreguntas')
+               ALTER TABLE OpcionesDuracion ADD NumeroPreguntas INT NOT NULL DEFAULT 0");
 
     if (conn.State == System.Data.ConnectionState.Open)
         conn.Close();

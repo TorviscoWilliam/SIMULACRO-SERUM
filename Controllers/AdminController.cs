@@ -1068,14 +1068,15 @@ namespace SimulacroExamen.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AgregarDuracion(int tipoExamenId, string etiqueta, int duracionMinutos)
+        public async Task<IActionResult> AgregarDuracion(int tipoExamenId, string etiqueta,
+                                                           int duracionMinutos, int numeroPreguntas = 0)
         {
             var tipo = await _db.TiposExamen.FindAsync(tipoExamenId);
             if (tipo == null) return NotFound();
 
-            if (string.IsNullOrWhiteSpace(etiqueta) || duracionMinutos < 1)
+            if (string.IsNullOrWhiteSpace(etiqueta))
             {
-                TempData["Error"] = "Etiqueta y duración son obligatorios.";
+                TempData["Error"] = "La etiqueta es obligatoria.";
                 return RedirectToAction(nameof(EditarTipo), new { id = tipoExamenId });
             }
 
@@ -1089,22 +1090,24 @@ namespace SimulacroExamen.Controllers
                 {
                     TipoExamenId    = tipoExamenId,
                     Etiqueta        = etiqueta.Trim(),
-                    DuracionMinutos = duracionMinutos,
+                    DuracionMinutos = Math.Max(0, duracionMinutos),
+                    NumeroPreguntas = Math.Max(0, numeroPreguntas),
                     Orden           = orden
                 });
                 await _db.SaveChangesAsync();
                 TempData["Exito"] = $"Opción '{etiqueta}' añadida.";
             }
-            catch
+            catch (Exception ex)
             {
-                TempData["Error"] = "No se pudo guardar. La tabla de duraciones aún no existe en la base de datos. Espera a que se despliegue la nueva versión.";
+                TempData["Error"] = "No se pudo guardar la opción: " + ex.Message;
             }
             return RedirectToAction(nameof(EditarTipo), new { id = tipoExamenId });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EditarDuracion(int id, string etiqueta, int duracionMinutos)
+        public async Task<IActionResult> EditarDuracion(int id, string etiqueta,
+                                                         int duracionMinutos, int numeroPreguntas = 0)
         {
             int tipoId = 0;
             try
@@ -1113,21 +1116,22 @@ namespace SimulacroExamen.Controllers
                 if (opcion == null) return NotFound();
                 tipoId = opcion.TipoExamenId;
 
-                if (string.IsNullOrWhiteSpace(etiqueta) || duracionMinutos < 1 || duracionMinutos > 600)
+                if (string.IsNullOrWhiteSpace(etiqueta))
                 {
-                    TempData["Error"] = "Etiqueta obligatoria y duración entre 1 y 600 minutos.";
+                    TempData["Error"] = "La etiqueta es obligatoria.";
                     return RedirectToAction(nameof(EditarTipo), new { id = tipoId });
                 }
 
                 opcion.Etiqueta        = etiqueta.Trim();
-                opcion.DuracionMinutos = duracionMinutos;
+                opcion.DuracionMinutos = Math.Max(0, duracionMinutos);
+                opcion.NumeroPreguntas = Math.Max(0, numeroPreguntas);
                 await _db.SaveChangesAsync();
 
                 TempData["Exito"] = $"Opción '{opcion.Etiqueta}' actualizada.";
             }
-            catch
+            catch (Exception ex)
             {
-                TempData["Error"] = "No se pudo actualizar la opción.";
+                TempData["Error"] = "No se pudo actualizar: " + ex.Message;
             }
             return RedirectToAction(nameof(EditarTipo), new { id = tipoId });
         }

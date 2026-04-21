@@ -159,7 +159,9 @@ namespace SimulacroExamen.Controllers
         // ── POST /Examen/IniciarExamen ───────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> IniciarExamen(int tipoExamenId, int duracionMinutosPersonalizada = 0)
+        public async Task<IActionResult> IniciarExamen(int tipoExamenId,
+                                                        int duracionMinutosPersonalizada = 0,
+                                                        int numeroPreguntasOpcion = 0)
         {
             var uid = CurrentUserId;
 
@@ -231,10 +233,11 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // En modo trial, limitar a 20 preguntas
-            int numPreguntas = (usuarioTrial?.EsTrial == true)
-                ? Math.Min(tipo.NumeroPreguntas, 20)
-                : tipo.NumeroPreguntas;
+            // numPreguntas: usa la opción seleccionada si viene > 0,
+            // si no usa el valor configurado en el tipo, y en trial máx 20.
+            int numPreguntas = numeroPreguntasOpcion > 0 ? numeroPreguntasOpcion : tipo.NumeroPreguntas;
+            if (usuarioTrial?.EsTrial == true)
+                numPreguntas = Math.Min(numPreguntas, 20);
 
             var preguntas = await _db.Preguntas
                 .Where(p => p.Activo && p.TipoExamenId == tipoExamenId)

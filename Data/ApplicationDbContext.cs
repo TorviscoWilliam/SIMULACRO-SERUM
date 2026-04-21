@@ -153,6 +153,8 @@ namespace SimulacroExamen.Data
                  .OnDelete(DeleteBehavior.Cascade);
 
                 e.Property(o => o.Etiqueta).HasMaxLength(100);
+                e.Property(o => o.DuracionMinutos).HasDefaultValue(0);
+                e.Property(o => o.NumeroPreguntas).HasDefaultValue(0);
             });
 
             // ── OrdenAlternativaExamen ────────────────────────────────
