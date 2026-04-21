@@ -290,10 +290,16 @@
                                 }
                                 else
                                 {
+                                    var duracionesJson = System.Text.Json.JsonSerializer.Serialize(
+                                        tipo.OpcionesDuracion
+                                            .OrderBy(o => o.Orden)
+                                            .Select(o => new { id = o.Id, etiqueta = o.Etiqueta, minutos = o.DuracionMinutos })
+                                    );
                                     <button type="button" class="btn btn-success w-100 btn-iniciar"
                                             data-tipoid="@tipo.Id"
                                             data-nombre="@tipo.Nombre"
                                             data-disponibles="@numPregs"
+                                            data-duraciones="@duracionesJson"
                                             data-bs-toggle="modal"
                                             data-bs-target="#modalModoExamen">
                                         <i class="bi bi-play-fill me-2"></i>Iniciar Examen
@@ -476,13 +482,23 @@
                     <i class="bi bi-exclamation-triangle me-1"></i>
                     <span id="avisoText"></span>
                 </div>
+
+                <!-- Sección de opciones de duración (solo si el tipo tiene opciones configuradas) -->
+                <div id="seccionDuraciones" class="d-none mt-3">
+                    <hr class="my-2"/>
+                    <p class="text-muted small mb-2 fw-semibold">
+                        <i class="bi bi-clock me-1"></i>Elige la duración:
+                    </p>
+                    <div id="listaDuraciones" class="row g-2"></div>
+                </div>
             </div>
             <div class="modal-footer border-0">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <form id="formIniciar" asp-action="IniciarExamen" method="post">
                     @Html.AntiForgeryToken()
-                    <input type="hidden" id="inputTipoId"     name="tipoExamenId" value="0" />
-                    <input type="hidden" id="inputNumPregs"   name="numPreguntas" value="20" />
+                    <input type="hidden" id="inputTipoId"            name="tipoExamenId"              value="0" />
+                    <input type="hidden" id="inputNumPregs"           name="numPreguntas"              value="20" />
+                    <input type="hidden" id="inputDuracionPersonalizada" name="duracionMinutosPersonalizada" value="0" />
                     <button type="submit" class="btn btn-success px-4">
                         <i class="bi bi-play-fill me-2"></i>Comenzar
                     </button>
@@ -537,12 +553,14 @@
     // Poblar modal al abrir
     document.querySelectorAll('.btn-iniciar').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            const tipoId     = this.dataset.tipoid;
-            const nombre     = this.dataset.nombre;
+            const tipoId      = this.dataset.tipoid;
+            const nombre      = this.dataset.nombre;
             const disponibles = parseInt(this.dataset.disponibles);
+            const duraciones  = JSON.parse(this.dataset.duraciones || '[]');
 
             document.getElementById('modoNombreTipo').textContent = nombre;
             document.getElementById('inputTipoId').value = tipoId;
+            document.getElementById('inputDuracionPersonalizada').value = '0';
 
             // Mostrar/ocultar opciones según disponibilidad
             ['50', '100'].forEach(function (n) {
@@ -571,6 +589,48 @@
                 avisoText.textContent = 'Solo hay ' + disponibles + ' preguntas disponibles. El examen se realizará con todas ellas.';
             } else {
                 aviso.classList.add('d-none');
+            }
+
+            // Opciones de duración personalizadas
+            const seccion = document.getElementById('seccionDuraciones');
+            const lista   = document.getElementById('listaDuraciones');
+            lista.innerHTML = '';
+            if (duraciones.length > 0) {
+                seccion.classList.remove('d-none');
+                duraciones.forEach(function (d, i) {
+                    const col = document.createElement('div');
+                    col.className = 'col-6 col-sm-4';
+                    col.innerHTML =
+                        '<label class="d-block cursor-pointer duracion-card" data-minutos="' + d.minutos + '">' +
+                        '<div class="card border-2 ' + (i === 0 ? 'border-info' : 'border-transparent') + ' p-2 text-center h-100" style="cursor:pointer">' +
+                        '<i class="bi bi-hourglass-split text-info mb-1 d-block"></i>' +
+                        '<div class="fw-semibold small">' + d.etiqueta + '</div>' +
+                        (i === 0 ? '<span class="badge bg-info mt-1">Seleccionado</span>' : '') +
+                        '</div></label>';
+                    lista.appendChild(col);
+                });
+                if (duraciones.length > 0)
+                    document.getElementById('inputDuracionPersonalizada').value = duraciones[0].minutos;
+
+                lista.querySelectorAll('.duracion-card').forEach(function (card) {
+                    card.addEventListener('click', function () {
+                        lista.querySelectorAll('.duracion-card').forEach(function (c) {
+                            const inner = c.querySelector('.card');
+                            inner.className = inner.className.replace('border-info', 'border-transparent');
+                            const badge = c.querySelector('.badge');
+                            if (badge) badge.remove();
+                        });
+                        const inner = this.querySelector('.card');
+                        inner.className = inner.className.replace('border-transparent', 'border-info');
+                        const b = document.createElement('span');
+                        b.className = 'badge bg-info mt-1';
+                        b.textContent = 'Seleccionado';
+                        inner.appendChild(b);
+                        document.getElementById('inputDuracionPersonalizada').value = this.dataset.minutos;
+                    });
+                });
+            } else {
+                seccion.classList.add('d-none');
             }
 
             // Reset selección a 20

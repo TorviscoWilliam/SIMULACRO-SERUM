@@ -984,7 +984,19 @@ namespace SimulacroExamen.Controllers
 
         public async Task<IActionResult> TiposExamen()
         {
-            var tipos = await _db.TiposExamen.OrderBy(t => t.Nombre).ToListAsync();
+            var tipos = await _db.TiposExamen
+                .OrderBy(t => t.Nombre)
+                .ToListAsync();
+            try
+            {
+                var ids     = tipos.Select(t => t.Id).ToList();
+                var opciones = await _db.OpcionesDuracion
+                    .Where(o => ids.Contains(o.TipoExamenId))
+                    .ToListAsync();
+                foreach (var t in tipos)
+                    t.OpcionesDuracion = opciones.Where(o => o.TipoExamenId == t.Id).ToList();
+            }
+            catch { /* tabla aún no existe */ }
             return View(tipos);
         }
 
@@ -1014,6 +1026,14 @@ namespace SimulacroExamen.Controllers
         {
             var tipo = await _db.TiposExamen.FindAsync(id);
             if (tipo == null) return NotFound();
+            try
+            {
+                tipo.OpcionesDuracion = await _db.OpcionesDuracion
+                    .Where(o => o.TipoExamenId == id)
+                    .OrderBy(o => o.Orden)
+                    .ToListAsync();
+            }
+            catch { /* tabla aún no existe */ }
             return View(tipo);
         }
 
@@ -1021,11 +1041,16 @@ namespace SimulacroExamen.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditarTipo(TipoExamen tipo)
         {
-            if (!ModelState.IsValid) return View(tipo);
+            if (!ModelState.IsValid)
+            {
+                try { tipo.OpcionesDuracion = await _db.OpcionesDuracion.Where(o => o.TipoExamenId == tipo.Id).OrderBy(o => o.Orden).ToListAsync(); } catch { }
+                return View(tipo);
+            }
 
             if (await _db.TiposExamen.AnyAsync(t => t.Nombre == tipo.Nombre && t.Id != tipo.Id))
             {
                 ModelState.AddModelError(nameof(tipo.Nombre), "Ya existe un tipo con ese nombre.");
+                try { tipo.OpcionesDuracion = await _db.OpcionesDuracion.Where(o => o.TipoExamenId == tipo.Id).OrderBy(o => o.Orden).ToListAsync(); } catch { }
                 return View(tipo);
             }
 
@@ -1038,7 +1063,125 @@ namespace SimulacroExamen.Controllers
             await _db.SaveChangesAsync();
 
             TempData["Exito"] = $"Tipo '{existing.Nombre}' actualizado correctamente.";
-            return RedirectToAction(nameof(TiposExamen));
+            return RedirectToAction(nameof(EditarTipo), new { id = existing.Id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AgregarDuracion(int tipoExamenId, string etiqueta, int duracionMinutos)
+        {
+            var tipo = await _db.TiposExamen.FindAsync(tipoExamenId);
+            if (tipo == null) return NotFound();
+
+            if (string.IsNullOrWhiteSpace(etiqueta) || duracionMinutos < 1)
+            {
+                TempData["Error"] = "Etiqueta y duración son obligatorios.";
+                return RedirectToAction(nameof(EditarTipo), new { id = tipoExamenId });
+            }
+
+            try
+            {
+                var orden = await _db.OpcionesDuracion
+                    .Where(o => o.TipoExamenId == tipoExamenId)
+                    .CountAsync();
+
+                _db.OpcionesDuracion.Add(new OpcionDuracion
+                {
+                    TipoExamenId    = tipoExamenId,
+                    Etiqueta        = etiqueta.Trim(),
+                    DuracionMinutos = duracionMinutos,
+                    Orden           = orden
+                });
+                await _db.SaveChangesAsync();
+                TempData["Exito"] = $"Opción '{etiqueta}' añadida.";
+            }
+            catch
+            {
+                TempData["Error"] = "No se pudo guardar. La tabla de duraciones aún no existe en la base de datos. Espera a que se despliegue la nueva versión.";
+            }
+            return RedirectToAction(nameof(EditarTipo), new { id = tipoExamenId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditarDuracion(int id, string etiqueta, int duracionMinutos)
+        {
+            int tipoId = 0;
+            try
+            {
+                var opcion = await _db.OpcionesDuracion.FindAsync(id);
+                if (opcion == null) return NotFound();
+                tipoId = opcion.TipoExamenId;
+
+                if (string.IsNullOrWhiteSpace(etiqueta) || duracionMinutos < 1 || duracionMinutos > 600)
+                {
+                    TempData["Error"] = "Etiqueta obligatoria y duración entre 1 y 600 minutos.";
+                    return RedirectToAction(nameof(EditarTipo), new { id = tipoId });
+                }
+
+                opcion.Etiqueta        = etiqueta.Trim();
+                opcion.DuracionMinutos = duracionMinutos;
+                await _db.SaveChangesAsync();
+
+                TempData["Exito"] = $"Opción '{opcion.Etiqueta}' actualizada.";
+            }
+            catch
+            {
+                TempData["Error"] = "No se pudo actualizar la opción.";
+            }
+            return RedirectToAction(nameof(EditarTipo), new { id = tipoId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> MoverDuracion(int id, string direccion)
+        {
+            int tipoId = 0;
+            try
+            {
+                var opcion = await _db.OpcionesDuracion.FindAsync(id);
+                if (opcion == null) return NotFound();
+                tipoId = opcion.TipoExamenId;
+
+                var hermanas = await _db.OpcionesDuracion
+                    .Where(o => o.TipoExamenId == tipoId)
+                    .OrderBy(o => o.Orden)
+                    .ToListAsync();
+
+                var idx = hermanas.FindIndex(o => o.Id == id);
+                var otroIdx = direccion == "up" ? idx - 1 : idx + 1;
+                if (idx >= 0 && otroIdx >= 0 && otroIdx < hermanas.Count)
+                {
+                    var tmp = hermanas[idx].Orden;
+                    hermanas[idx].Orden = hermanas[otroIdx].Orden;
+                    hermanas[otroIdx].Orden = tmp;
+                    await _db.SaveChangesAsync();
+                }
+            }
+            catch { /* tabla aún no existe */ }
+            return RedirectToAction(nameof(EditarTipo), new { id = tipoId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EliminarDuracion(int id)
+        {
+            int tipoId = 0;
+            try
+            {
+                var opcion = await _db.OpcionesDuracion.FindAsync(id);
+                if (opcion == null) return NotFound();
+
+                tipoId = opcion.TipoExamenId;
+                _db.OpcionesDuracion.Remove(opcion);
+                await _db.SaveChangesAsync();
+                TempData["Exito"] = "Opción de duración eliminada.";
+            }
+            catch
+            {
+                TempData["Error"] = "No se pudo eliminar la opción.";
+            }
+            return RedirectToAction(nameof(EditarTipo), new { id = tipoId });
         }
 
         [HttpPost]

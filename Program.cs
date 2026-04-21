@@ -433,6 +433,23 @@ Participa en **sorteos exclusivos.**',
                         'https://wa.me/51936037152','¡Suscribirme ya!',1,3);
                END");
 
+        // Tabla OrdenesAlternativaExamen (orden aleatorio de alternativas por pregunta de examen)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='OrdenesAlternativaExamen')
+               CREATE TABLE OrdenesAlternativaExamen (
+                   Id               INT IDENTITY(1,1) PRIMARY KEY,
+                   PreguntaExamenId INT NOT NULL,
+                   AlternativaId    INT NOT NULL,
+                   Orden            INT NOT NULL DEFAULT 0,
+                   CONSTRAINT FK_OrdenesAlt_PreguntaExamen
+                       FOREIGN KEY (PreguntaExamenId)
+                       REFERENCES PreguntasExamen(Id) ON DELETE CASCADE,
+                   CONSTRAINT FK_OrdenesAlt_Alternativa
+                       FOREIGN KEY (AlternativaId)
+                       REFERENCES Alternativas(Id)
+               )");
+
         // Tabla Sugerencias
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.TABLES
@@ -482,6 +499,21 @@ Participa en **sorteos exclusivos.**',
                    UsarSsl              BIT            NOT NULL DEFAULT 1,
                    UltimaActualizacion  DATETIME2      NOT NULL DEFAULT GETDATE(),
                    AdminId              INT            NOT NULL DEFAULT 0
+               )");
+
+        // Tabla OpcionesDuracion (opciones de tiempo configurables por TipoExamen)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='OpcionesDuracion')
+               CREATE TABLE OpcionesDuracion (
+                   Id              INT IDENTITY(1,1) PRIMARY KEY,
+                   TipoExamenId    INT            NOT NULL,
+                   Etiqueta        NVARCHAR(100)  NOT NULL,
+                   DuracionMinutos INT            NOT NULL,
+                   Orden           INT            NOT NULL DEFAULT 0,
+                   CONSTRAINT FK_OpcionesDuracion_TiposExamen
+                       FOREIGN KEY (TipoExamenId)
+                       REFERENCES TiposExamen(Id) ON DELETE CASCADE
                )");
 
     if (conn.State == System.Data.ConnectionState.Open)

@@ -25,12 +25,31 @@ namespace SimulacroExamen.Controllers
             var uid = CurrentUserId;
 
             // Tipos de examen a los que el usuario tiene acceso
-            var tiposAcceso = await _db.UsuarioTiposExamen
+            var tipoIds = await _db.UsuarioTiposExamen
                 .Where(ut => ut.UsuarioId == uid)
-                .Include(ut => ut.TipoExamen)
-                .Select(ut => ut.TipoExamen)
-                .Where(t => t!.Activo)
+                .Select(ut => ut.TipoExamenId)
                 .ToListAsync();
+
+            var tiposAcceso = await _db.TiposExamen
+                .Where(t => tipoIds.Contains(t.Id) && t.Activo)
+                .ToListAsync();
+
+            // Cargar las opciones de duración por separado para que funcione
+            // aunque la tabla aún no exista en Azure.
+            try
+            {
+                var idList  = tiposAcceso.Select(t => t.Id).ToList();
+                var opciones = await _db.OpcionesDuracion
+                    .Where(o => idList.Contains(o.TipoExamenId))
+                    .OrderBy(o => o.Orden)
+                    .ToListAsync();
+                foreach (var t in tiposAcceso)
+                    t.OpcionesDuracion = opciones.Where(o => o.TipoExamenId == t.Id).ToList();
+            }
+            catch
+            {
+                // Tabla OpcionesDuracion aún no existe en esta instancia de Azure.
+            }
 
             ViewBag.TotalExamenes = await _db.Examenes
                 .CountAsync(e => e.UsuarioId == uid && e.Completado);
@@ -140,7 +159,7 @@ namespace SimulacroExamen.Controllers
         // ── POST /Examen/IniciarExamen ───────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> IniciarExamen(int tipoExamenId, int numPreguntas = 20)
+        public async Task<IActionResult> IniciarExamen(int tipoExamenId, int numPreguntas = 20, int duracionMinutosPersonalizada = 0)
         {
             if (numPreguntas != 20 && numPreguntas != 50 && numPreguntas != 100)
                 numPreguntas = 20;
@@ -218,12 +237,16 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // Duración: usa el valor configurado en TipoExamen si existe;
-            // si no, calcula automáticamente según el número de preguntas.
+            // Duración: 1) personalizada elegida por el estudiante,
+            // 2) fija del TipoExamen, 3) calculada por número de preguntas.
             var tipo = await _db.TiposExamen.FindAsync(tipoExamenId);
-            int? duracionSegundos = tipo?.DuracionMinutos.HasValue == true
-                ? tipo.DuracionMinutos * 60
-                : numPreguntas switch
+            int? duracionSegundos;
+            if (duracionMinutosPersonalizada > 0)
+                duracionSegundos = duracionMinutosPersonalizada * 60;
+            else if (tipo?.DuracionMinutos.HasValue == true)
+                duracionSegundos = tipo.DuracionMinutos * 60;
+            else
+                duracionSegundos = numPreguntas switch
                 {
                     50  => 30 * 60,
                     100 => 60 * 60,
@@ -250,27 +273,58 @@ namespace SimulacroExamen.Controllers
             _db.Examenes.Add(examen);
             await _db.SaveChangesAsync();
 
-            for (int i = 0; i < mezcladas.Count; i++)
+            // Guardar el orden aleatorio de alternativas por pregunta.
+            // Se hace en dos pasos: primero PreguntasExamen (siempre), luego
+            // OrdenesAlternativaExamen en un try/catch por si la tabla aún no existe
+            // en la BD (Azure puede estar corriendo una versión anterior del esquema).
+            var preguntasConOrden = mezcladas.Select((p, i) => new
             {
-                var p = mezcladas[i];
-                var altsOrden = p.Alternativas.OrderBy(_ => rng.Next())
-                                              .Select(a => a.Id)
-                                              .ToList();
+                Pregunta  = p,
+                Orden     = i + 1,
+                AltsOrden = p.Alternativas.OrderBy(_ => rng.Next()).Select(a => a.Id).ToList()
+            }).ToList();
 
+            foreach (var item in preguntasConOrden)
+            {
                 _db.PreguntasExamen.Add(new PreguntaExamen
                 {
-                    ExamenId  = examen.Id,
-                    PreguntaId = p.Id,
-                    Orden     = i + 1,
-                    OrdenAlternativasExamen = altsOrden.Select((altId, idx) => new OrdenAlternativaExamen
-                    {
-                        AlternativaId = altId,
-                        Orden         = idx
-                    }).ToList()
+                    ExamenId   = examen.Id,
+                    PreguntaId = item.Pregunta.Id,
+                    Orden      = item.Orden
                 });
             }
-
             await _db.SaveChangesAsync();
+
+            // Intentar persistir el orden de alternativas (tabla puede no existir en Azure)
+            try
+            {
+                var peIds = await _db.PreguntasExamen
+                    .Where(pe => pe.ExamenId == examen.Id)
+                    .OrderBy(pe => pe.Orden)
+                    .Select(pe => pe.Id)
+                    .ToListAsync();
+
+                for (int i = 0; i < preguntasConOrden.Count; i++)
+                {
+                    var altIds = preguntasConOrden[i].AltsOrden;
+                    for (int j = 0; j < altIds.Count; j++)
+                    {
+                        _db.OrdenesAlternativaExamen.Add(new OrdenAlternativaExamen
+                        {
+                            PreguntaExamenId = peIds[i],
+                            AlternativaId    = altIds[j],
+                            Orden            = j
+                        });
+                    }
+                }
+                await _db.SaveChangesAsync();
+            }
+            catch
+            {
+                // Tabla OrdenesAlternativaExamen aún no existe: el examen
+                // funciona igual, Tomar muestra las alternativas en orden original.
+            }
+
             await tx.CommitAsync();
             return RedirectToAction(nameof(Tomar), new { id = examen.Id });
         }
@@ -331,48 +385,73 @@ namespace SimulacroExamen.Controllers
         // ── GET /Examen/Tomar/{id} ────────────────────────────────────
         public async Task<IActionResult> Tomar(int id)
         {
+            // NO incluir OrdenesAlternativaExamen aquí: si la tabla no existe en Azure
+            // el query completo falla. Se carga por separado en try/catch abajo.
             var examen = await _db.Examenes
                 .Include(e => e.TipoExamen)
                 .Include(e => e.PreguntasExamen)
                     .ThenInclude(pe => pe.Pregunta)
                         .ThenInclude(p => p.Alternativas)
-                .Include(e => e.PreguntasExamen)
-                    .ThenInclude(pe => pe.OrdenAlternativasExamen)
                 .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == CurrentUserId && !e.Completado);
 
             if (examen == null)
                 return RedirectToAction(nameof(Index));
 
-            // Calcular segundos restantes según la duración del examen
+            // Cargar el orden de alternativas en un bloque independiente
+            // para que funcione aunque la tabla aún no exista en la BD.
+            var ordenAlt = new Dictionary<int, List<int>>();
+            try
+            {
+                var peIds = examen.PreguntasExamen.Select(pe => pe.Id).ToList();
+                var ordenes = await _db.OrdenesAlternativaExamen
+                    .Where(o => peIds.Contains(o.PreguntaExamenId))
+                    .ToListAsync();
+
+                ordenAlt = ordenes
+                    .GroupBy(o => o.PreguntaExamenId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.OrderBy(o => o.Orden).Select(o => o.AlternativaId).ToList());
+            }
+            catch
+            {
+                // Tabla OrdenesAlternativaExamen aún no existe; se usará el orden original.
+            }
+
             if (examen.DuracionSegundos.HasValue)
             {
                 var transcurridos = (int)(DateTime.Now - examen.FechaInicio).TotalSeconds;
-                var restantes     = Math.Max(0, examen.DuracionSegundos.Value - transcurridos);
-                ViewBag.SegundosRestantes = restantes;
+                ViewBag.SegundosRestantes = Math.Max(0, examen.DuracionSegundos.Value - transcurridos);
             }
             else
             {
-                ViewBag.SegundosRestantes = null; // sin límite de tiempo
+                ViewBag.SegundosRestantes = null;
             }
 
             var vm = new ExamenViewModel
             {
-                ExamenId       = examen.Id,
+                ExamenId         = examen.Id,
                 TipoExamenNombre = examen.TipoExamen?.Nombre ?? ""
             };
 
             foreach (var pe in examen.PreguntasExamen.OrderBy(x => x.Orden))
             {
-                var altsOrdenadas = pe.OrdenAlternativasExamen
-                    .OrderBy(o => o.Orden)
-                    .Select(o => pe.Pregunta.Alternativas.FirstOrDefault(a => a.Id == o.AlternativaId))
-                    .Where(a => a != null)
-                    .Select(a => new AlternativaVM
-                    {
-                        Id               = a!.Id,
-                        TextoAlternativa = a.TextoAlternativa
-                    })
-                    .ToList();
+                List<AlternativaVM> altsOrdenadas;
+
+                if (ordenAlt.TryGetValue(pe.Id, out var altIds) && altIds.Any())
+                {
+                    altsOrdenadas = altIds
+                        .Select(altId => pe.Pregunta.Alternativas.FirstOrDefault(a => a.Id == altId))
+                        .Where(a => a != null)
+                        .Select(a => new AlternativaVM { Id = a!.Id, TextoAlternativa = a.TextoAlternativa })
+                        .ToList();
+                }
+                else
+                {
+                    altsOrdenadas = pe.Pregunta.Alternativas
+                        .Select(a => new AlternativaVM { Id = a.Id, TextoAlternativa = a.TextoAlternativa })
+                        .ToList();
+                }
 
                 vm.Preguntas.Add(new PreguntaExamenVM
                 {

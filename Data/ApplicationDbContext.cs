@@ -27,6 +27,7 @@ namespace SimulacroExamen.Data
         public DbSet<CaracteristicaPlan>     CaracteristicasPlan     { get; set; }
         public DbSet<Sugerencia>             Sugerencias             { get; set; }
         public DbSet<ConfiguracionCorreo>    ConfiguracionCorreo     { get; set; }
+        public DbSet<OpcionDuracion>         OpcionesDuracion        { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -141,6 +142,17 @@ namespace SimulacroExamen.Data
                  .WithMany(a => a.PreguntasExamen)
                  .HasForeignKey(pe => pe.AlternativaSeleccionadaId)
                  .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ── OpcionDuracion ────────────────────────────────────────
+            modelBuilder.Entity<OpcionDuracion>(e =>
+            {
+                e.HasOne(o => o.TipoExamen)
+                 .WithMany(t => t.OpcionesDuracion)
+                 .HasForeignKey(o => o.TipoExamenId)
+                 .OnDelete(DeleteBehavior.Cascade);
+
+                e.Property(o => o.Etiqueta).HasMaxLength(100);
             });
 
             // ── OrdenAlternativaExamen ────────────────────────────────

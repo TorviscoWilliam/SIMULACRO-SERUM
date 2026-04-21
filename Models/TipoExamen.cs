@@ -28,5 +28,6 @@ namespace SimulacroExamen.Models
         public ICollection<Pregunta> Preguntas { get; set; } = new List<Pregunta>();
         public ICollection<Examen> Examenes { get; set; } = new List<Examen>();
         public ICollection<UsuarioTipoExamen> UsuariosTipoExamen { get; set; } = new List<UsuarioTipoExamen>();
+        public ICollection<OpcionDuracion> OpcionesDuracion { get; set; } = new List<OpcionDuracion>();
     }
 }
