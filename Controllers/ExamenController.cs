@@ -30,9 +30,18 @@ namespace SimulacroExamen.Controllers
                 .Select(ut => ut.TipoExamenId)
                 .ToListAsync();
 
-            var tiposAcceso = await _db.TiposExamen
-                .Where(t => tipoIds.Contains(t.Id) && t.Activo)
-                .ToListAsync();
+            List<TipoExamen> tiposAcceso;
+            try
+            {
+                tiposAcceso = await _db.TiposExamen
+                    .Where(t => tipoIds.Contains(t.Id) && t.Activo)
+                    .ToListAsync();
+            }
+            catch
+            {
+                // NumeroPreguntas u otra columna nueva no existe aún en la BD de producción
+                tiposAcceso = new List<TipoExamen>();
+            }
 
             // Cargar las opciones de duración por separado para que funcione
             // aunque la tabla aún no exista en Azure.
@@ -80,25 +89,34 @@ namespace SimulacroExamen.Controllers
             var hoy = DateTime.Today;
             var intentosHoy = await _db.Examenes
                 .CountAsync(e => e.UsuarioId == uid && e.FechaInicio >= hoy);
-            var limiteExtra = await _db.Estudiantes
-                .Where(u => u.Id == uid)
-                .Select(u => u.IntentosExtra)
-                .FirstOrDefaultAsync();
+
+            int limiteExtra = 0;
+            try
+            {
+                limiteExtra = await _db.Estudiantes
+                    .Where(u => u.Id == uid)
+                    .Select(u => u.IntentosExtra)
+                    .FirstOrDefaultAsync();
+            }
+            catch { /* columna IntentosExtra aún no existe en esta BD */ }
+
             ViewBag.IntentosHoy       = intentosHoy;
             ViewBag.IntentosRestantes = Math.Max(0, 5 + limiteExtra - intentosHoy);
             ViewBag.LimiteDiario      = 5 + limiteExtra;
 
             // Estado trial y suscripción
-            var usuarioData = await _db.Estudiantes
-                .Where(u => u.Id == uid)
-                .Select(u => new { u.EsTrial, u.FechaVencimiento })
-                .FirstOrDefaultAsync();
-
-            var examenesCompletados = await _db.Examenes
-                .CountAsync(e => e.UsuarioId == uid && e.Completado);
-
-            bool esTrial    = usuarioData?.EsTrial ?? false;
-            var  fechaVenc  = usuarioData?.FechaVencimiento;
+            bool esTrial   = false;
+            DateTime? fechaVenc = null;
+            try
+            {
+                var usuarioData = await _db.Estudiantes
+                    .Where(u => u.Id == uid)
+                    .Select(u => new { u.EsTrial, u.FechaVencimiento })
+                    .FirstOrDefaultAsync();
+                esTrial   = usuarioData?.EsTrial ?? false;
+                fechaVenc = usuarioData?.FechaVencimiento;
+            }
+            catch { /* columnas EsTrial/FechaVencimiento aún no existen en esta BD */ }
             bool vencida    = !esTrial && fechaVenc.HasValue && fechaVenc.Value < DateTime.Now;
             int  diasRestantes = (!esTrial && fechaVenc.HasValue && fechaVenc.Value >= DateTime.Now)
                                  ? (int)Math.Ceiling((fechaVenc.Value - DateTime.Now).TotalDays)
@@ -132,26 +150,34 @@ namespace SimulacroExamen.Controllers
             ViewBag.GraficaTipos      = ultimos10.Select(e => e.TipoNombre).ToList();
 
             // Planes de suscripción para el modal trial
-            ViewBag.PlanesSuscripcion = await _db.PlanesSuscripcion
-                .Include(p => p.Caracteristicas)
-                .Where(p => p.Activo)
-                .OrderBy(p => p.Orden)
-                .ToListAsync();
+            try
+            {
+                ViewBag.PlanesSuscripcion = await _db.PlanesSuscripcion
+                    .Include(p => p.Caracteristicas)
+                    .Where(p => p.Activo)
+                    .OrderBy(p => p.Orden)
+                    .ToListAsync();
+            }
+            catch { ViewBag.PlanesSuscripcion = new List<PlanSuscripcion>(); }
 
-            // Examen incompleto (reanudable)
-            ViewBag.ExamenEnCurso = await _db.Examenes
-                .Include(e => e.TipoExamen)
-                .Where(e => e.UsuarioId == uid && !e.Completado)
-                .OrderByDescending(e => e.FechaInicio)
-                .Select(e => new {
-                    e.Id,
-                    e.FechaInicio,
-                    e.TotalPreguntas,
-                    e.DuracionSegundos,
-                    TipoNombre = e.TipoExamen != null ? e.TipoExamen.Nombre : "General",
-                    RespuestasDadas = e.PreguntasExamen.Count(pe => pe.AlternativaSeleccionadaId != null)
-                })
-                .FirstOrDefaultAsync();
+            // Examen incompleto (reanudable) — DuracionSegundos puede no existir en BD vieja
+            try
+            {
+                ViewBag.ExamenEnCurso = await _db.Examenes
+                    .Include(e => e.TipoExamen)
+                    .Where(e => e.UsuarioId == uid && !e.Completado)
+                    .OrderByDescending(e => e.FechaInicio)
+                    .Select(e => new {
+                        e.Id,
+                        e.FechaInicio,
+                        e.TotalPreguntas,
+                        e.DuracionSegundos,
+                        TipoNombre = e.TipoExamen != null ? e.TipoExamen.Nombre : "General",
+                        RespuestasDadas = e.PreguntasExamen.Count(pe => pe.AlternativaSeleccionadaId != null)
+                    })
+                    .FirstOrDefaultAsync();
+            }
+            catch { ViewBag.ExamenEnCurso = null; }
 
             return View();
         }
