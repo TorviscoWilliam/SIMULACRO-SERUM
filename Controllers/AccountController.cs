@@ -8,6 +8,7 @@ using SimulacroExamen.Services;
 using SimulacroExamen.ViewModels;
 using System.Collections.Concurrent;
 using System.Security.Claims;
+using System.Security.Cryptography;
 
 namespace SimulacroExamen.Controllers
 {
@@ -20,6 +21,11 @@ namespace SimulacroExamen.Controllers
         private static readonly ConcurrentDictionary<string, (int intentos, DateTime bloqueoHasta)> _loginIntentos = new();
         private const int MaxIntentos = 5;
         private static readonly TimeSpan DuracionBloqueo = TimeSpan.FromMinutes(15);
+
+        // Genera un token seguro (256 bits de entropía) usando CSPRNG.
+        // Sustituye a Guid.NewGuid() para tokens de sesión, verificación y reset.
+        private static string GenerarTokenSeguro() =>
+            Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
         public AccountController(ApplicationDbContext db, IEmailService email)
         {
@@ -80,7 +86,7 @@ namespace SimulacroExamen.Controllers
             // Si por algún motivo el UPDATE falla (ej: columna SessionToken ausente
             // en una BD con esquema desactualizado), no bloqueamos el login: el
             // middleware de validación tolera el desajuste dejando pasar el request.
-            var sessionToken = Guid.NewGuid().ToString();
+            var sessionToken = GenerarTokenSeguro();
             try
             {
                 usuario.SessionToken = sessionToken;
@@ -103,10 +109,13 @@ namespace SimulacroExamen.Controllers
             var identity  = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var principal = new ClaimsPrincipal(identity);
 
+            // IsPersistent controla si la cookie sobrevive al cierre del navegador.
+            // Si el usuario no marca "Recordarme", la cookie se borra al cerrar
+            // el navegador (útil en dispositivos compartidos).
             await HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 principal,
-                new AuthenticationProperties { IsPersistent = true });
+                new AuthenticationProperties { IsPersistent = vm.Recordarme });
 
             if (!string.IsNullOrEmpty(vm.ReturnUrl) && Url.IsLocalUrl(vm.ReturnUrl))
                 return Redirect(vm.ReturnUrl);
@@ -116,13 +125,32 @@ namespace SimulacroExamen.Controllers
                 : RedirectToAction("Index", "Examen");
         }
 
-        // ── GET /Account/Verificar?campo=usuario|correo|celular|dni&valor=... ───
-        // Usado por AJAX en el formulario de registro para validación en tiempo real.
-        [HttpGet]
+        // ── Rate-limit del endpoint Verificar por IP ──────────────────
+        // 30 requests por minuto es suficiente para un formulario humano,
+        // pero frena la enumeración masiva de correos/DNIs/celulares.
+        private static readonly ConcurrentDictionary<string, (int count, DateTime windowStart)> _verificarThrottle = new();
+        private const int VerificarMaxPorMinuto = 30;
+
+        // ── POST /Account/Verificar ──────────────────────────────────
+        // Antes era GET — se cambió a POST con token CSRF para evitar
+        // enumeración masiva desde otros sitios o por scraping.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Verificar(string campo, string valor)
         {
             if (string.IsNullOrWhiteSpace(valor))
                 return Json(new { ocupado = false });
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var ahora = DateTime.UtcNow;
+            var entry = _verificarThrottle.AddOrUpdate(ip,
+                _ => (1, ahora),
+                (_, prev) => (ahora - prev.windowStart) > TimeSpan.FromMinutes(1)
+                    ? (1, ahora)
+                    : (prev.count + 1, prev.windowStart));
+
+            if (entry.count > VerificarMaxPorMinuto)
+                return StatusCode(429, new { ocupado = false, error = "Demasiadas solicitudes." });
 
             bool ocupado = campo switch
             {
@@ -234,7 +262,7 @@ namespace SimulacroExamen.Controllers
                 while (await _db.Usuarios.AnyAsync(u => u.NombreUsuario == nombreUpper) && i < 100);
             }
 
-            var tokenVerificacion = Guid.NewGuid().ToString("N");
+            var tokenVerificacion = GenerarTokenSeguro();
 
             var nuevoUsuario = new Estudiante
             {
@@ -297,7 +325,11 @@ namespace SimulacroExamen.Controllers
             return RedirectToAction(nameof(VerificacionPendiente));
         }
 
-        // ── GET /Account/Logout ──────────────────────────────────────
+        // ── POST /Account/Logout ─────────────────────────────────────
+        // Solo POST con token CSRF: evita que un tercero pueda forzar el logout
+        // mediante <img src="/Account/Logout"> o similares.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -330,9 +362,9 @@ namespace SimulacroExamen.Controllers
 
             if (usuario != null)
             {
-                var token  = Guid.NewGuid().ToString("N");
+                var token  = GenerarTokenSeguro();
                 usuario.PasswordResetToken  = token;
-                usuario.PasswordResetExpiry = DateTime.Now.AddHours(1);
+                usuario.PasswordResetExpiry = DateTime.UtcNow.AddHours(1);
                 await _db.SaveChangesAsync();
 
                 var link = Url.Action("ResetearContrasena", "Account",
@@ -373,7 +405,7 @@ namespace SimulacroExamen.Controllers
 
             var usuario = await _db.Usuarios
                 .FirstOrDefaultAsync(u => u.PasswordResetToken == token
-                                       && u.PasswordResetExpiry > DateTime.Now);
+                                       && u.PasswordResetExpiry > DateTime.UtcNow);
 
             if (usuario == null)
             {
@@ -405,7 +437,7 @@ namespace SimulacroExamen.Controllers
 
             var usuario = await _db.Usuarios
                 .FirstOrDefaultAsync(u => u.PasswordResetToken == token
-                                       && u.PasswordResetExpiry > DateTime.Now);
+                                       && u.PasswordResetExpiry > DateTime.UtcNow);
 
             if (usuario == null)
             {
@@ -467,7 +499,7 @@ namespace SimulacroExamen.Controllers
             if (usuario != null)
             {
                 // Regenerar token
-                var token = Guid.NewGuid().ToString("N");
+                var token = GenerarTokenSeguro();
                 usuario.EmailVerificacionToken = token;
                 await _db.SaveChangesAsync();
 

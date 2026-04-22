@@ -382,7 +382,14 @@
                                         {
                                             <li class="d-flex align-items-start gap-2 mb-2">
                                                 <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                                                <span>@Html.Raw(System.Text.RegularExpressions.Regex.Replace(feat.Texto.Trim(), @"\*\*(.+?)\*\*", "<strong>$1</strong>"))</span>
+                                                @{
+                                                    // Encodar HTML primero para neutralizar cualquier script, luego aplicar
+                                                    // el marcado **negrita** como tags <strong> controlados. Evita Stored XSS.
+                                                    var featSanitizado = System.Net.WebUtility.HtmlEncode(feat.Texto.Trim());
+                                                    var featConNegritas = System.Text.RegularExpressions.Regex.Replace(
+                                                        featSanitizado, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+                                                }
+                                                <span>@Html.Raw(featConNegritas)</span>
                                             </li>
                                         }
                                     </ul>

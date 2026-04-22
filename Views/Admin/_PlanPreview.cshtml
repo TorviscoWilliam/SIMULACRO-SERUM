@@ -57,7 +57,12 @@
                 {
                     <li class="d-flex align-items-start gap-2 mb-1">
                         <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
-                        <span>@Html.Raw(System.Text.RegularExpressions.Regex.Replace(feat.Texto.Trim(), @"\*\*(.+?)\*\*", "<strong>$1</strong>"))</span>
+                        @{
+                            var fTexto = System.Net.WebUtility.HtmlEncode(feat.Texto.Trim());
+                            var fConNegritas = System.Text.RegularExpressions.Regex.Replace(
+                                fTexto, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+                        }
+                        <span>@Html.Raw(fConNegritas)</span>
                     </li>
                 }
             </ul>

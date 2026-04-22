@@ -9,11 +9,14 @@ namespace SimulacroExamen.Services
     {
         private readonly IConfiguration _config;
         private readonly ApplicationDbContext _db;
+        private readonly ISecretProtector _secretProtector;
 
-        public EmailService(IConfiguration config, ApplicationDbContext db)
+        public EmailService(IConfiguration config, ApplicationDbContext db,
+                            ISecretProtector secretProtector)
         {
-            _config = config;
-            _db     = db;
+            _config          = config;
+            _db              = db;
+            _secretProtector = secretProtector;
         }
 
         public async Task EnviarAsync(string destinatario, string asunto, string cuerpoHtml)
@@ -33,7 +36,9 @@ namespace SimulacroExamen.Services
                 smtp       = cfgDb.Smtp;
                 port       = cfgDb.Puerto;
                 usuario    = cfgDb.UsuarioCorreo;
-                contrasena = cfgDb.Contrasena;
+                // La contraseña puede estar cifrada (formato ENC::...) o en texto
+                // plano si fue guardada por una versión anterior. Desproteger es idempotente.
+                contrasena = _secretProtector.Desproteger(cfgDb.Contrasena);
                 remitente  = cfgDb.NombreRemitente;
                 usarSsl    = cfgDb.UsarSsl;
             }

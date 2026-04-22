@@ -117,7 +117,7 @@
                             <label class="form-label fw-semibold small">Nombre de Usuario</label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text"><i class="bi bi-person"></i></span>
-                                <input id="nombreUsuario" name="NombreUsuario" class="form-control bg-body-secondary"
+                                <input id="nombreUsuario" class="form-control bg-body-secondary"
                                        placeholder="Se genera al escribir tu nombre…" readonly tabindex="-1"/>
                             </div>
                             <div class="form-text small text-muted">
@@ -232,10 +232,22 @@
     }
 
     // ── AJAX: verificar disponibilidad ────────────────────────────
+    // Se envía por POST con el token anti-CSRF del formulario para evitar
+    // que el endpoint sea abusado desde otros sitios o por scraping masivo.
     async function verificar(campo, valor) {
         if (!valor) return null;
         try {
-            const r = await fetch(`/Account/Verificar?campo=${campo}&valor=${encodeURIComponent(valor)}`);
+            const tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+            const body = new URLSearchParams();
+            body.append('campo', campo);
+            body.append('valor', valor);
+            if (tokenEl) body.append('__RequestVerificationToken', tokenEl.value);
+            const r = await fetch('/Account/Verificar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            if (!r.ok) return null;
             const d = await r.json();
             return d.ocupado;
         } catch { return null; }

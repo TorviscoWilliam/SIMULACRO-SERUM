@@ -36,10 +36,8 @@ namespace SimulacroExamen.ViewModels
         public string Dni { get; set; } = string.Empty;
 
         // ── Credenciales ─────────────────────────────────────────────
-        [Required(ErrorMessage = "El nombre de usuario es obligatorio")]
-        [MaxLength(100)]
-        [Display(Name = "Nombre de Usuario")]
-        public string NombreUsuario { get; set; } = string.Empty;
+        // El nombre de usuario se genera automáticamente en el servidor
+        // a partir de PrimerNombre + PrimerApellido; no se acepta del cliente.
 
         [Required(ErrorMessage = "El correo es obligatorio")]
         [EmailAddress(ErrorMessage = "Formato de correo inválido")]

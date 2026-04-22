@@ -11,21 +11,26 @@ namespace SimulacroExamen.Controllers
     [Authorize(Roles = "Admin,SuperAdmin")]
     public class AdminController : BaseController
     {
-        private readonly ApplicationDbContext _db;
-        private readonly IExcelService        _excel;
-        private readonly IWebHostEnvironment  _env;
-        private readonly IEmailService        _email;
-        private readonly IConfiguration       _config;
+        private readonly ApplicationDbContext     _db;
+        private readonly IExcelService            _excel;
+        private readonly IWebHostEnvironment      _env;
+        private readonly IEmailService            _email;
+        private readonly IConfiguration           _config;
+        private readonly ILogger<AdminController> _log;
+        private readonly ISecretProtector         _secretProtector;
 
         public AdminController(ApplicationDbContext db, IExcelService excel,
                                IWebHostEnvironment env, IEmailService email,
-                               IConfiguration config)
+                               IConfiguration config, ILogger<AdminController> log,
+                               ISecretProtector secretProtector)
         {
-            _db     = db;
-            _excel  = excel;
-            _env    = env;
-            _email  = email;
-            _config = config;
+            _db              = db;
+            _excel           = excel;
+            _env             = env;
+            _email           = email;
+            _config          = config;
+            _log             = log;
+            _secretProtector = secretProtector;
         }
 
         // ── Dashboard ────────────────────────────────────────────────
@@ -1099,7 +1104,8 @@ namespace SimulacroExamen.Controllers
             }
             catch (Exception ex)
             {
-                TempData["Error"] = "No se pudo guardar la opción: " + ex.Message;
+                _log.LogError(ex, "Error guardando opción de duración en tipo {TipoId}", tipoExamenId);
+                TempData["Error"] = "No se pudo guardar la opción. Intenta de nuevo.";
             }
             return RedirectToAction(nameof(EditarTipo), new { id = tipoExamenId });
         }
@@ -1131,7 +1137,8 @@ namespace SimulacroExamen.Controllers
             }
             catch (Exception ex)
             {
-                TempData["Error"] = "No se pudo actualizar: " + ex.Message;
+                _log.LogError(ex, "Error actualizando opción de duración {Id}", id);
+                TempData["Error"] = "No se pudo actualizar. Intenta de nuevo.";
             }
             return RedirectToAction(nameof(EditarTipo), new { id = tipoId });
         }
@@ -1669,7 +1676,9 @@ namespace SimulacroExamen.Controllers
             ModelState.Remove(nameof(PlanSuscripcion.Caracteristicas));
             if (!ModelState.IsValid) return View(plan);
 
-            plan.FechaCreacion  = DateTime.Now;
+            plan.ColorPrimario   = ValidarColorHex(plan.ColorPrimario,   "#74c0fc");
+            plan.ColorSecundario = ValidarColorHex(plan.ColorSecundario, "#4dabf7");
+            plan.FechaCreacion   = DateTime.Now;
             plan.Caracteristicas = ParsearCaracteristicas(Request.Form["CaracteristicasTexto"].ToString());
             _db.PlanesSuscripcion.Add(plan);
             await _db.SaveChangesAsync();
@@ -1677,6 +1686,15 @@ namespace SimulacroExamen.Controllers
             TempData["Exito"] = $"Plan \"{plan.Nombre}\" creado correctamente.";
             return RedirectToAction(nameof(Planes));
         }
+
+        // Valida que un string sea un color hexadecimal (#RGB o #RRGGBB).
+        // Si no lo es, devuelve el valor por defecto. Previene CSS Injection
+        // cuando el color se inyecta en atributos style=.
+        private static string ValidarColorHex(string? valor, string porDefecto) =>
+            !string.IsNullOrWhiteSpace(valor) &&
+            System.Text.RegularExpressions.Regex.IsMatch(valor.Trim(), @"^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$")
+                ? valor.Trim()
+                : porDefecto;
 
         public async Task<IActionResult> EditarPlan(int id)
         {
@@ -1703,8 +1721,8 @@ namespace SimulacroExamen.Controllers
             existing.Etiqueta        = plan.Etiqueta;
             existing.Precio          = plan.Precio;
             existing.TextoPrecio     = plan.TextoPrecio;
-            existing.ColorPrimario   = plan.ColorPrimario;
-            existing.ColorSecundario = plan.ColorSecundario;
+            existing.ColorPrimario   = ValidarColorHex(plan.ColorPrimario,   "#74c0fc");
+            existing.ColorSecundario = ValidarColorHex(plan.ColorSecundario, "#4dabf7");
             existing.EsPopular       = plan.EsPopular;
             existing.TextoBadge      = plan.TextoBadge;
             existing.EnlaceBoton     = plan.EnlaceBoton;
@@ -1778,8 +1796,15 @@ namespace SimulacroExamen.Controllers
                 _db.AnunciosGlobales.Add(anuncio);
             }
 
+            // Whitelist de tipos permitidos para evitar CSS Class Injection / Stored XSS
+            // en el atributo class="alert alert-@Tipo" del layout.
+            var tiposValidos = new[] { "info", "warning", "danger", "success", "primary", "secondary" };
+            var tipoNormalizado = (tipo ?? "").Trim().ToLowerInvariant();
+            if (!tiposValidos.Contains(tipoNormalizado))
+                tipoNormalizado = "warning";
+
             anuncio.Mensaje              = mensaje.Trim();
-            anuncio.Tipo                 = tipo;
+            anuncio.Tipo                 = tipoNormalizado;
             anuncio.Activo               = activo;
             anuncio.FechaActualizacion   = DateTime.Now;
             anuncio.AdminId              = adminId;
@@ -1861,10 +1886,41 @@ namespace SimulacroExamen.Controllers
             return View(vm);
         }
 
+        // Whitelist de dominios SMTP permitidos para evitar que un admin
+        // apunte el servidor SMTP a endpoints internos (SSRF) o al metadata
+        // service de la nube (169.254.169.254).
+        private static readonly string[] DominiosSmtpPermitidos = new[]
+        {
+            "smtp.gmail.com",
+            "smtp-mail.outlook.com",
+            "smtp.office365.com",
+            "smtp.sendgrid.net",
+            "smtp.mail.yahoo.com",
+            "smtp.zoho.com",
+            "email-smtp.us-east-1.amazonaws.com",
+            "email-smtp.us-west-2.amazonaws.com"
+        };
+
         [HttpPost, Authorize(Roles = "SuperAdmin"), ValidateAntiForgeryToken]
         public async Task<IActionResult> ConfiguracionCorreo(ConfiguracionCorreoViewModel vm)
         {
             if (!ModelState.IsValid) return View(vm);
+
+            var smtpNormalizado = (vm.Smtp ?? "").Trim().ToLowerInvariant();
+            if (!DominiosSmtpPermitidos.Contains(smtpNormalizado))
+            {
+                ModelState.AddModelError(nameof(vm.Smtp),
+                    "Servidor SMTP no permitido. Dominios válidos: " + string.Join(", ", DominiosSmtpPermitidos));
+                return View(vm);
+            }
+
+            // Validar puerto (solo los estándares de SMTP saliente)
+            if (vm.Puerto != 25 && vm.Puerto != 465 && vm.Puerto != 587 && vm.Puerto != 2525)
+            {
+                ModelState.AddModelError(nameof(vm.Puerto),
+                    "Puerto SMTP inválido. Valores permitidos: 25, 465, 587, 2525.");
+                return View(vm);
+            }
 
             var cfg = await _db.ConfiguracionCorreo.OrderBy(c => c.Id).FirstOrDefaultAsync();
 
@@ -1874,7 +1930,7 @@ namespace SimulacroExamen.Controllers
                 _db.ConfiguracionCorreo.Add(cfg);
             }
 
-            cfg.Smtp            = vm.Smtp.Trim();
+            cfg.Smtp            = smtpNormalizado;
             cfg.Puerto          = vm.Puerto;
             cfg.UsuarioCorreo   = vm.UsuarioCorreo.Trim();
             cfg.NombreRemitente = vm.NombreRemitente.Trim();
@@ -1882,9 +1938,11 @@ namespace SimulacroExamen.Controllers
             cfg.UltimaActualizacion = DateTime.Now;
             cfg.AdminId         = CurrentUserId;
 
-            // Solo actualiza la contraseña si el admin introdujo una nueva
+            // Solo actualiza la contraseña si el admin introdujo una nueva.
+            // Se cifra con DataProtection antes de persistir para que un backup
+            // comprometido no exponga la contraseña SMTP en texto plano.
             if (!string.IsNullOrWhiteSpace(vm.Contrasena))
-                cfg.Contrasena = vm.Contrasena.Trim();
+                cfg.Contrasena = _secretProtector.Proteger(vm.Contrasena.Trim());
 
             await _db.SaveChangesAsync();
             await RegistrarLog("ConfiguracionCorreo", "Configuración SMTP actualizada");
@@ -1919,7 +1977,8 @@ namespace SimulacroExamen.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { ok = false, mensaje = $"Error al enviar: {ex.Message}" });
+                _log.LogError(ex, "Error enviando correo de prueba a {Destino}", correoDestino);
+                return Json(new { ok = false, mensaje = "No se pudo enviar el correo. Revisa la configuración SMTP." });
             }
         }
 

@@ -30,5 +30,13 @@ namespace SimulacroExamen.ViewModels
         /// para prevenir ataques de open redirect.
         /// </summary>
         public string? ReturnUrl { get; set; }
+
+        /// <summary>
+        /// Cuando es false la cookie de sesión se borra al cerrar el navegador;
+        /// útil en dispositivos compartidos. Cuando es true persiste el tiempo
+        /// configurado (8h) aunque el usuario cierre el navegador.
+        /// </summary>
+        [Display(Name = "Mantener sesión iniciada")]
+        public bool Recordarme { get; set; } = false;
     }
 }

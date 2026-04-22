@@ -10,17 +10,31 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 
-// Necesario para que funcione correctamente detrás del proxy inverso de Azure
+// Necesario para que funcione correctamente detrás del proxy inverso (Azure/Railway).
+// No se hace .Clear() de KnownNetworks/KnownProxies: eso haría que la app confiase
+// ciegamente en X-Forwarded-For de cualquier cliente, permitiendo spoofing de IP
+// para burlar el rate-limiting de login. Por defecto, ASP.NET Core solo confía en
+// el loopback (la situación típica cuando el proxy está en el mismo host).
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.ForwardLimit     = 1; // solo aceptar 1 header; evita stacking malicioso
+
+    // Plataformas como Railway o nginx-proxy reenvían desde IPs privadas que
+    // no siempre son loopback. Añadimos los rangos RFC1918 típicos de contenedores.
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+        System.Net.IPAddress.Parse("10.0.0.0"), 8));
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+        System.Net.IPAddress.Parse("172.16.0.0"), 12));
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+        System.Net.IPAddress.Parse("192.168.0.0"), 16));
 });
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
 builder.Services.AddScoped<IExcelService, ExcelService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
@@ -56,6 +70,22 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"]  = "nosniff";
     context.Response.Headers["Referrer-Policy"]         = "strict-origin-when-cross-origin";
     context.Response.Headers["Permissions-Policy"]      = "camera=(), microphone=(), geolocation=()";
+
+    // Content-Security-Policy: limita qué recursos puede cargar/ejecutar la página
+    // para mitigar XSS residuales. Incluye los CDNs que usan Bootstrap/Chart.js.
+    // 'unsafe-inline' se mantiene para los <script> y <style> inline existentes
+    // en las vistas — quitar cuando migremos a nonces.
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com; " +
+        "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com fonts.googleapis.com; " +
+        "font-src 'self' cdn.jsdelivr.net cdnjs.cloudflare.com fonts.gstatic.com data:; " +
+        "img-src 'self' data: blob: https:; " +
+        "connect-src 'self'; " +
+        "frame-ancestors 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'";
+
     await next();
 });
 
@@ -75,9 +105,9 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
     // EnsureCreated crea la BD y todas las tablas si la BD no existe.
-    // Si la BD ya existe pero las tablas faltan (ej. BD creada manualmente o
-    // DROP ejecutado), verificamos la tabla Usuarios y recreamos si es necesario.
-    InicializarBD(context);
+    // En producción nunca recreamos automáticamente: si falta una tabla,
+    // abortamos el arranque para que un humano investigue.
+    InicializarBD(context, app.Environment.IsDevelopment());
 
     // Migrar columnas nuevas que no existían en versiones anteriores
     MigrarEsquema(context);
@@ -534,7 +564,7 @@ Participa en **sorteos exclusivos.**',
 }
 
 // ── Helper: crear esquema desde cero si las tablas no existen ────
-static void InicializarBD(ApplicationDbContext context)
+static void InicializarBD(ApplicationDbContext context, bool isDevelopment)
 {
     // Paso 1: crear la BD si no existe (sin tocar las tablas si ya hay)
     context.Database.EnsureCreated();
@@ -542,31 +572,32 @@ static void InicializarBD(ApplicationDbContext context)
     // Paso 2: verificar que la tabla Usuarios existe.
     // EnsureCreated devuelve false cuando la BD ya existe, incluso si está vacía
     // (comportamiento de SQL Server: si hay CUALQUIER tabla, no crea nada).
-    // Si Usuarios no existe, la BD está incompleta → eliminar y recrear.
-    try
+    var conn = context.Database.GetDbConnection();
+    conn.Open();
+
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText =
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES " +
+        "WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME = 'Usuarios'";
+
+    var existe = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+    conn.Close();
+
+    if (existe) return;
+
+    // En producción NUNCA eliminar la BD automáticamente: un error transitorio
+    // de red podría destruir toda la data. Fallar explícitamente para que
+    // un humano investigue y decida cómo proceder.
+    if (!isDevelopment)
     {
-        var conn = context.Database.GetDbConnection();
-        conn.Open();
-
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES " +
-            "WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME = 'Usuarios'";
-
-        var existe = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
-        conn.Close();
-
-        if (!existe)
-        {
-            // BD existe pero sin las tablas esperadas → recrear desde cero
-            context.Database.EnsureDeleted();
-            context.Database.EnsureCreated();
-        }
+        throw new InvalidOperationException(
+            "La base de datos existe pero la tabla 'Usuarios' no fue encontrada. " +
+            "Esto indica una migración incompleta o corrupción del esquema. " +
+            "Ejecuta el script de migración manualmente. Se aborta el arranque para " +
+            "evitar la pérdida de datos.");
     }
-    catch
-    {
-        // No se pudo conectar o verificar → forzar recreación
-        context.Database.EnsureDeleted();
-        context.Database.EnsureCreated();
-    }
+
+    // Solo en desarrollo: recrear la BD desde cero
+    context.Database.EnsureDeleted();
+    context.Database.EnsureCreated();
 }

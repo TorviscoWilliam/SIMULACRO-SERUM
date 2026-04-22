@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,11 @@ namespace SimulacroExamen.Controllers
         private readonly ApplicationDbContext    _db;
         private readonly IConfiguration          _config;
         private readonly ILogger<ExamenController> _log;
+
+        // Serializa las solicitudes concurrentes del mismo usuario para evitar
+        // que requests paralelos burlen el límite diario de exámenes (TOCTOU).
+        // Cada usuario tiene su propio semáforo; usuarios distintos no se bloquean.
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> _usuarioLocks = new();
 
         public ExamenController(ApplicationDbContext db, IConfiguration config,
                                 ILogger<ExamenController> log)
@@ -204,6 +210,36 @@ namespace SimulacroExamen.Controllers
                 _log.LogError(ex, "IniciarExamen falló — tipoId={TipoId} uid={Uid}", tipoExamenId, CurrentUserId);
                 TempData["Error"] = "No se pudo iniciar el examen. El equipo técnico fue notificado. Intenta de nuevo o contacta al administrador.";
                 return RedirectToAction(nameof(Index));
+            }
+        }
+
+        private async Task<IActionResult> IniciarExamenInterno(int tipoExamenId,
+                                                                int duracionMinutosPersonalizada,
+                                                                int numeroPreguntasOpcion)
+        {
+            var uid = CurrentUserId;
+            var semaforo = _usuarioLocks.GetOrAdd(uid, _ => new SemaphoreSlim(1, 1));
+
+            // Esperar el turno con timeout razonable para evitar DoS si un request se cuelga
+            if (!await semaforo.WaitAsync(TimeSpan.FromSeconds(15)))
+            {
+                TempData["Error"] = "Hay otra solicitud en proceso. Intenta de nuevo en unos segundos.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            try
+            {
+                return await IniciarExamenInterno(tipoExamenId, duracionMinutosPersonalizada, numeroPreguntasOpcion);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "IniciarExamen falló — tipoId={TipoId} uid={Uid}", tipoExamenId, uid);
+                TempData["Error"] = "No se pudo iniciar el examen. El equipo técnico fue notificado. Intenta de nuevo o contacta al administrador.";
+                return RedirectToAction(nameof(Index));
+            }
+            finally
+            {
+                semaforo.Release();
             }
         }
 
