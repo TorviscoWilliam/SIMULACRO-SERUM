@@ -340,21 +340,6 @@ namespace SimulacroExamen.Controllers
                     examenId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
                 }
 
-                // Fijar DuracionSegundos en UPDATE separado — si la columna no existe, se ignora
-                if (duracionSegundos.HasValue)
-                {
-                    try
-                    {
-                        using var durCmd = dbConn.CreateCommand();
-                        durCmd.Transaction = dbTx;
-                        durCmd.CommandText = "UPDATE Examenes SET DuracionSegundos = @dur WHERE Id = @id";
-                        var dp1 = durCmd.CreateParameter(); dp1.ParameterName = "@dur"; dp1.Value = duracionSegundos.Value; durCmd.Parameters.Add(dp1);
-                        var dp2 = durCmd.CreateParameter(); dp2.ParameterName = "@id";  dp2.Value = examenId; durCmd.Parameters.Add(dp2);
-                        await durCmd.ExecuteNonQueryAsync();
-                    }
-                    catch { /* DuracionSegundos aún no existe en esta BD */ }
-                }
-
                 // INSERT PreguntasExamen usando EF Core en la misma transacción
                 _db.Database.UseTransaction(dbTx);
                 foreach (var item in preguntasConOrden)
@@ -368,6 +353,20 @@ namespace SimulacroExamen.Controllers
                 }
                 await _db.SaveChangesAsync();
                 await dbTx.CommitAsync();
+            }
+
+            // Fijar DuracionSegundos FUERA de la transacción principal para evitar que un
+            // error por columna inexistente envenene el estado de la transacción (SQL Server
+            // marca el tx como "doomed" incluso si el catch C# silencia la excepción).
+            if (duracionSegundos.HasValue)
+            {
+                try
+                {
+                    await _db.Database.ExecuteSqlRawAsync(
+                        "UPDATE Examenes SET DuracionSegundos = {0} WHERE Id = {1}",
+                        duracionSegundos.Value, examenId);
+                }
+                catch { /* columna aún no existe en esta BD */ }
             }
 
             // Paso 2: intentar persistir OrdenesAlternativaExamen en una operación
