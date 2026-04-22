@@ -10,13 +10,16 @@ namespace SimulacroExamen.Controllers
     [Authorize(Roles = "Usuario")]
     public class ExamenController : BaseController
     {
-        private readonly ApplicationDbContext _db;
-        private readonly IConfiguration       _config;
+        private readonly ApplicationDbContext    _db;
+        private readonly IConfiguration          _config;
+        private readonly ILogger<ExamenController> _log;
 
-        public ExamenController(ApplicationDbContext db, IConfiguration config)
+        public ExamenController(ApplicationDbContext db, IConfiguration config,
+                                ILogger<ExamenController> log)
         {
             _db     = db;
             _config = config;
+            _log    = log;
         }
 
         // ── Panel principal: muestra los tipos de examen disponibles ──
@@ -192,6 +195,22 @@ namespace SimulacroExamen.Controllers
                                                         int duracionMinutosPersonalizada = 0,
                                                         int numeroPreguntasOpcion = 0)
         {
+            try
+            {
+                return await IniciarExamenInterno(tipoExamenId, duracionMinutosPersonalizada, numeroPreguntasOpcion);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "IniciarExamen falló — tipoId={TipoId} uid={Uid}", tipoExamenId, CurrentUserId);
+                TempData["Error"] = "No se pudo iniciar el examen. El equipo técnico fue notificado. Intenta de nuevo o contacta al administrador.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
+        private async Task<IActionResult> IniciarExamenInterno(int tipoExamenId,
+                                                                int duracionMinutosPersonalizada,
+                                                                int numeroPreguntasOpcion)
+        {
             var uid = CurrentUserId;
 
             // Verificar que el usuario tiene acceso a este tipo
@@ -204,12 +223,15 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // Si ya existe un examen incompleto, reanudar ese
-            var examenExistente = await _db.Examenes
-                .FirstOrDefaultAsync(e => e.UsuarioId == uid && !e.Completado);
+            // Si ya existe un examen incompleto, reanudar ese.
+            // Se proyecta solo Id para no tocar DuracionSegundos (puede no existir en Azure).
+            var examenExistenteId = await _db.Examenes
+                .Where(e => e.UsuarioId == uid && !e.Completado)
+                .Select(e => (int?)e.Id)
+                .FirstOrDefaultAsync();
 
-            if (examenExistente != null)
-                return RedirectToAction(nameof(Tomar), new { id = examenExistente.Id });
+            if (examenExistenteId != null)
+                return RedirectToAction(nameof(Tomar), new { id = examenExistenteId.Value });
 
             // ── Restricciones de modo trial y suscripción vencida ───
             bool esTrialUser     = false;
@@ -263,17 +285,40 @@ namespace SimulacroExamen.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // Tipo de examen: NumeroPreguntas viene de la configuración del admin, no del form.
-            var tipo = await _db.TiposExamen.FindAsync(tipoExamenId);
-            if (tipo == null)
+            // Cargar TipoExamen con proyección para no fallar si NumeroPreguntas/DuracionMinutos
+            // aún no existen en la BD de producción. Si la proyección falla (columna ausente),
+            // se cae al catch que verifica solo la existencia del tipo con columnas básicas.
+            int    numPreguntasTipo  = 20;
+            int?   durMinutosTipo    = null;
+
+            try
             {
-                TempData["Error"] = "Tipo de examen no encontrado.";
-                return RedirectToAction(nameof(Index));
+                var td = await _db.TiposExamen
+                    .Where(t => t.Id == tipoExamenId)
+                    .Select(t => new { t.NumeroPreguntas, t.DuracionMinutos })
+                    .FirstOrDefaultAsync();
+
+                if (td == null)
+                {
+                    TempData["Error"] = "Tipo de examen no encontrado.";
+                    return RedirectToAction(nameof(Index));
+                }
+                numPreguntasTipo = td.NumeroPreguntas;
+                durMinutosTipo   = td.DuracionMinutos;
+            }
+            catch
+            {
+                // NumeroPreguntas o DuracionMinutos no existen aún; verificar existencia mínima
+                bool existe = await _db.TiposExamen.AnyAsync(t => t.Id == tipoExamenId);
+                if (!existe)
+                {
+                    TempData["Error"] = "Tipo de examen no encontrado.";
+                    return RedirectToAction(nameof(Index));
+                }
             }
 
-            // numPreguntas: usa la opción seleccionada si viene > 0,
-            // si no usa el valor configurado en el tipo, y en trial máx 20.
-            int numPreguntas = numeroPreguntasOpcion > 0 ? numeroPreguntasOpcion : tipo.NumeroPreguntas;
+            // numPreguntas: opción elegida > default del tipo > 20
+            int numPreguntas = numeroPreguntasOpcion > 0 ? numeroPreguntasOpcion : numPreguntasTipo;
             if (esTrialUser)
                 numPreguntas = Math.Min(numPreguntas, 20);
 
@@ -293,8 +338,8 @@ namespace SimulacroExamen.Controllers
             int? duracionSegundos;
             if (duracionMinutosPersonalizada > 0)
                 duracionSegundos = duracionMinutosPersonalizada * 60;
-            else if (tipo.DuracionMinutos.HasValue)
-                duracionSegundos = tipo.DuracionMinutos * 60;
+            else if (durMinutosTipo.HasValue)
+                duracionSegundos = durMinutosTipo * 60;
             else
                 duracionSegundos = null;
 
@@ -303,8 +348,12 @@ namespace SimulacroExamen.Controllers
                                      .Take(Math.Min(numPreguntas, preguntas.Count))
                                      .ToList();
 
-            // Paso 1: guardar Examen + PreguntasExamen en UNA transacción.
-            // Si algo falla aquí, hacemos rollback y no se crea nada.
+            // Paso 1: guardar Examen + PreguntasExamen en UNA transacción pura de ADO.NET.
+            // Se evita EF Core para los INSERTs porque:
+            //   a) EF Core incluye DuracionSegundos en el SQL del INSERT aunque la columna
+            //      no exista aún en la BD de producción (Azure con esquema anterior).
+            //   b) UseTransaction() puede fallar si EF Core no acepta la transacción externa
+            //      tras haber ejecutado queries en modo auto-administrado.
             var preguntasConOrden = mezcladas.Select((p, i) => new
             {
                 Pregunta  = p,
@@ -312,10 +361,6 @@ namespace SimulacroExamen.Controllers
                 AltsOrden = p.Alternativas.OrderBy(_ => rng.Next()).Select(a => a.Id).ToList()
             }).ToList();
 
-            // Paso 1: Guardar Examen + PreguntasExamen en UNA transacción.
-            // Se usa raw SQL para el INSERT de Examen para evitar que EF Core genere
-            // SQL con "DuracionSegundos" cuando esa columna aún no existe en la BD
-            // de producción (Azure con esquema anterior al despliegue actual).
             var dbConn = _db.Database.GetDbConnection();
             if (dbConn.State != System.Data.ConnectionState.Open)
                 await ((System.Data.Common.DbConnection)dbConn).OpenAsync();
@@ -323,13 +368,14 @@ namespace SimulacroExamen.Controllers
             int examenId;
             await using (var dbTx = await ((System.Data.Common.DbConnection)dbConn).BeginTransactionAsync())
             {
-                // INSERT solo con columnas que existen en todas las versiones del esquema
+                // INSERT Examen — solo columnas estables (sin DuracionSegundos)
+                // Se incluye Puntaje=0 porque es INT NOT NULL sin DEFAULT en la BD.
                 using (var cmd = dbConn.CreateCommand())
                 {
                     cmd.Transaction = dbTx;
                     cmd.CommandText =
-                        "INSERT INTO Examenes (UsuarioId, TipoExamenId, FechaInicio, TotalPreguntas, Completado) " +
-                        "VALUES (@uid, @tipo, @fecha, @total, 0); " +
+                        "INSERT INTO Examenes (UsuarioId, TipoExamenId, FechaInicio, TotalPreguntas, Completado, Puntaje) " +
+                        "VALUES (@uid, @tipo, @fecha, @total, 0, 0); " +
                         "SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
                     var p1 = cmd.CreateParameter(); p1.ParameterName = "@uid";   p1.Value = uid;             cmd.Parameters.Add(p1);
@@ -340,24 +386,28 @@ namespace SimulacroExamen.Controllers
                     examenId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
                 }
 
-                // INSERT PreguntasExamen usando EF Core en la misma transacción
-                _db.Database.UseTransaction(dbTx);
+                // INSERT PreguntasExamen — raw SQL para mantenerse dentro del mismo dbTx
+                // sin pasar por UseTransaction() de EF Core.
                 foreach (var item in preguntasConOrden)
                 {
-                    _db.PreguntasExamen.Add(new PreguntaExamen
-                    {
-                        ExamenId   = examenId,
-                        PreguntaId = item.Pregunta.Id,
-                        Orden      = item.Orden
-                    });
+                    using var peCmd = dbConn.CreateCommand();
+                    peCmd.Transaction = dbTx;
+                    peCmd.CommandText =
+                        "INSERT INTO PreguntasExamen (ExamenId, PreguntaId, Orden) " +
+                        "VALUES (@eid, @pid, @ord)";
+
+                    var pe1 = peCmd.CreateParameter(); pe1.ParameterName = "@eid"; pe1.Value = examenId;        peCmd.Parameters.Add(pe1);
+                    var pe2 = peCmd.CreateParameter(); pe2.ParameterName = "@pid"; pe2.Value = item.Pregunta.Id; peCmd.Parameters.Add(pe2);
+                    var pe3 = peCmd.CreateParameter(); pe3.ParameterName = "@ord"; pe3.Value = item.Orden;       peCmd.Parameters.Add(pe3);
+
+                    await peCmd.ExecuteNonQueryAsync();
                 }
-                await _db.SaveChangesAsync();
+
                 await dbTx.CommitAsync();
             }
 
-            // Fijar DuracionSegundos FUERA de la transacción principal para evitar que un
-            // error por columna inexistente envenene el estado de la transacción (SQL Server
-            // marca el tx como "doomed" incluso si el catch C# silencia la excepción).
+            // DuracionSegundos se fija FUERA de la transacción para evitar que un error
+            // "Invalid column name" envenene el tx (SQL Server lo marca como doomed).
             if (duracionSegundos.HasValue)
             {
                 try
@@ -407,7 +457,7 @@ namespace SimulacroExamen.Controllers
             }
 
             return RedirectToAction(nameof(Tomar), new { id = examenId });
-        }
+        } // fin IniciarExamenInterno
 
         // ── POST /Examen/GuardarRespuesta (AJAX) ─────────────────────
         [HttpPost]

@@ -1,0 +1,19 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Secrets - nunca subir al repositorio
+appsettings.Development.json
+appsettings.*.json
+!appsettings.json
+
+## Logs
+*.log
+logs/
+
+## Publish
+publish/
+wwwroot/uploads/
