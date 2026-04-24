@@ -70,8 +70,8 @@ namespace SimulacroExamen.Models
         [MaxLength(8)]   public string? Dni             { get; set; }
 
         // ── Seguridad de sesión ───────────────────────────────────────
-        /// <summary>GUID único de la sesión activa. Se renueva en cada login.</summary>
-        [MaxLength(36)] public string? SessionToken { get; set; }
+        /// <summary>Token hex-64 de la sesión activa. Se renueva en cada login.</summary>
+        [MaxLength(128)] public string? SessionToken { get; set; }
 
         // ── Reset de contraseña ───────────────────────────────────────
         /// <summary>Token único para restablecer contraseña (expira en 1 hora).</summary>

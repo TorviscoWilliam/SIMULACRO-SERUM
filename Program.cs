@@ -290,11 +290,18 @@ static void MigrarEsquema(ApplicationDbContext context)
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='Dni')
                ALTER TABLE Usuarios ADD Dni NVARCHAR(8) NULL");
 
-        // Columna SessionToken para sesión única por usuario
+        // Columna SessionToken para sesión única por usuario (128 chars para token hex-64)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='SessionToken')
-               ALTER TABLE Usuarios ADD SessionToken NVARCHAR(36) NULL");
+               ALTER TABLE Usuarios ADD SessionToken NVARCHAR(128) NULL");
+
+        // Ampliar SessionToken si aún tiene el tamaño antiguo de 36
+        Exec(@"IF EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='SessionToken'
+                     AND CHARACTER_MAXIMUM_LENGTH < 128)
+               ALTER TABLE Usuarios ALTER COLUMN SessionToken NVARCHAR(128) NULL");
 
         // Columna EsTrial para modo prueba
         Exec(@"IF NOT EXISTS (
