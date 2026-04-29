@@ -6,11 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] – Simulacro de Examen</title>
 
-    <!-- Aplicar tema ANTES de renderizar para evitar flash de pantalla blanca -->
+    <!-- Aplicar tema ANTES de renderizar para evitar flash -->
     <script>
         (function () {
             var t = localStorage.getItem('tema') || 'light';
-            document.documentElement.setAttribute('data-bs-theme', t);
+            var bsTheme = t === 'dark' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-bs-theme', bsTheme);
+            document.documentElement.setAttribute('data-tema', t);
         })();
     </script>
 
@@ -169,12 +171,52 @@
                     </ul>
 
                     <ul class="navbar-nav align-items-center gap-2">
-                        <!-- Botón modo oscuro -->
-                        <li class="nav-item">
-                            <button id="btnTema" class="btn btn-sm btn-outline-light"
-                                    title="Cambiar tema" onclick="toggleTema()">
+                        <!-- Selector de tema / accesibilidad -->
+                        <li class="nav-item dropdown">
+                            <button id="btnTema" class="btn btn-sm btn-outline-light dropdown-toggle"
+                                    title="Tema y accesibilidad" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i id="iconTema" class="bi bi-moon-stars-fill"></i>
                             </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow" style="min-width:210px">
+                                <li><h6 class="dropdown-header"><i class="bi bi-circle-half me-1"></i>Tema</h6></li>
+                                <li>
+                                    <button class="dropdown-item d-flex align-items-center gap-2" onclick="setTema('light')">
+                                        <i class="bi bi-sun-fill text-warning"></i> Claro
+                                        <i id="check-light" class="bi bi-check2 ms-auto"></i>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item d-flex align-items-center gap-2" onclick="setTema('dark')">
+                                        <i class="bi bi-moon-stars-fill text-primary"></i> Oscuro
+                                        <i id="check-dark" class="bi bi-check2 ms-auto d-none"></i>
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><h6 class="dropdown-header"><i class="bi bi-eye me-1"></i>Daltonismo</h6></li>
+                                <li>
+                                    <button class="dropdown-item d-flex align-items-center gap-2" onclick="setTema('deuteranopia')">
+                                        <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#f5a623,#4a90d9)"></span>
+                                        Deuteranopia <small class="text-muted ms-1">rojo-verde</small>
+                                        <i id="check-deuteranopia" class="bi bi-check2 ms-auto d-none"></i>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item d-flex align-items-center gap-2" onclick="setTema('protanopia')">
+                                        <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#f0c040,#5b8dd9)"></span>
+                                        Protanopia <small class="text-muted ms-1">rojo débil</small>
+                                        <i id="check-protanopia" class="bi bi-check2 ms-auto d-none"></i>
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><h6 class="dropdown-header"><i class="bi bi-circle me-1"></i>Contraste</h6></li>
+                                <li>
+                                    <button class="dropdown-item d-flex align-items-center gap-2" onclick="setTema('grises')">
+                                        <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#aaa,#333)"></span>
+                                        Escala de grises
+                                        <i id="check-grises" class="bi bi-check2 ms-auto d-none"></i>
+                                    </button>
+                                </li>
+                            </ul>
                         </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle d-flex align-items-center gap-2"
@@ -273,25 +315,67 @@
     <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 
-    <!-- Modo oscuro -->
+    <!-- Filtros SVG para daltonismo (invisibles, solo definen los filtros CSS) -->
+    <svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true">
+        <defs>
+            <!-- Deuteranopia: déficit de fotorreceptores verdes (más común, ~6% varones) -->
+            <filter id="svgf-deuteranopia">
+                <feColorMatrix type="matrix" values="
+                    0.625 0.375 0.000 0 0
+                    0.700 0.300 0.000 0 0
+                    0.000 0.300 0.700 0 0
+                    0.000 0.000 0.000 1 0"/>
+            </filter>
+            <!-- Protanopia: déficit de fotorreceptores rojos -->
+            <filter id="svgf-protanopia">
+                <feColorMatrix type="matrix" values="
+                    0.567 0.433 0.000 0 0
+                    0.558 0.442 0.000 0 0
+                    0.000 0.242 0.758 0 0
+                    0.000 0.000 0.000 1 0"/>
+            </filter>
+        </defs>
+    </svg>
+
+    <!-- Selector de tema y accesibilidad -->
     <script>
-        function toggleTema() {
-            var html  = document.documentElement;
-            var actual = html.getAttribute('data-bs-theme');
-            var nuevo  = actual === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-bs-theme', nuevo);
-            localStorage.setItem('tema', nuevo);
-            actualizarIconTema(nuevo);
+        var _temas = ['light','dark','deuteranopia','protanopia','grises'];
+
+        function setTema(tema) {
+            var html = document.documentElement;
+            localStorage.setItem('tema', tema);
+            html.setAttribute('data-bs-theme', tema === 'dark' ? 'dark' : 'light');
+            html.setAttribute('data-tema', tema);
+            actualizarIconTema(tema);
+            actualizarChecks(tema);
         }
 
         function actualizarIconTema(tema) {
             var icon = document.getElementById('iconTema');
             if (!icon) return;
-            icon.className = tema === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+            var iconos = {
+                light:        'bi bi-sun-fill',
+                dark:         'bi bi-moon-stars-fill',
+                deuteranopia: 'bi bi-eye-fill',
+                protanopia:   'bi bi-eye-fill',
+                grises:       'bi bi-circle-half'
+            };
+            icon.className = iconos[tema] || 'bi bi-moon-stars-fill';
         }
 
-        // Sincronizar ícono al cargar la página
-        actualizarIconTema(localStorage.getItem('tema') || 'light');
+        function actualizarChecks(tema) {
+            _temas.forEach(function(t) {
+                var el = document.getElementById('check-' + t);
+                if (el) el.classList.toggle('d-none', t !== tema);
+            });
+        }
+
+        // Aplicar al cargar
+        (function () {
+            var t = localStorage.getItem('tema') || 'light';
+            actualizarIconTema(t);
+            actualizarChecks(t);
+        })();
     </script>
 </body>
 </html>

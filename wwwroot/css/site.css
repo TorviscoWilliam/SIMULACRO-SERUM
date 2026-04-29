@@ -208,3 +208,17 @@ footer {
     background-color: var(--bs-tertiary-bg) !important;
     border-color: var(--bs-border-color) !important;
 }
+
+/* ── Temas de accesibilidad para daltonismo ─────────────────── */
+
+[data-tema="deuteranopia"] body {
+    filter: url('#svgf-deuteranopia');
+}
+
+[data-tema="protanopia"] body {
+    filter: url('#svgf-protanopia');
+}
+
+[data-tema="grises"] body {
+    filter: grayscale(100%);
+}
