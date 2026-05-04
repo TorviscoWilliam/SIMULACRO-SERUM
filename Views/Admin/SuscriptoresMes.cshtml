@@ -30,11 +30,8 @@
                         <select name="mes" class="form-select form-select-sm" onchange="this.form.submit()">
                             @foreach (var (mes, anio, etiqueta) in Model.MesesDisponibles)
                             {
-                                <option value="@mes"
-                                        data-anio="@anio"
-                                        @(mes == Model.Mes && anio == Model.Anio ? "selected" : "")>
-                                    @etiqueta
-                                </option>
+                                var sel = (mes == Model.Mes && anio == Model.Anio) ? "selected" : null;
+                                <option value="@mes" data-anio="@anio" selected="@sel">@etiqueta</option>
                             }
                         </select>
                     </div>

@@ -66,9 +66,9 @@ namespace SimulacroExamen.Services
             else
             {
                 // Fallback a appsettings.json (solo si existe la sección Email completa)
-                smtp       = _config["Email:Smtp"];
-                usuario    = _config["Email:Usuario"];
-                contrasena = _config["Email:Contrasena"];
+                smtp       = _config["Email:Smtp"] ?? string.Empty;
+                usuario    = _config["Email:Usuario"] ?? string.Empty;
+                contrasena = _config["Email:Contrasena"] ?? string.Empty;
 
                 if (string.IsNullOrWhiteSpace(smtp) ||
                     string.IsNullOrWhiteSpace(usuario) ||

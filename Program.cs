@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
 using SimulacroExamen.Services;
