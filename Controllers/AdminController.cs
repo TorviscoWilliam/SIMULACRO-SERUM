@@ -2038,7 +2038,8 @@ namespace SimulacroExamen.Controllers
             catch (Exception ex)
             {
                 _log.LogError(ex, "Error enviando correo de prueba a {Destino}", correoDestino);
-                return Json(new { ok = false, mensaje = "No se pudo enviar el correo. Revisa la configuración SMTP." });
+                var detalle = ex.InnerException?.Message ?? ex.Message;
+                return Json(new { ok = false, mensaje = $"Error SMTP: {detalle}" });
             }
         }
 
