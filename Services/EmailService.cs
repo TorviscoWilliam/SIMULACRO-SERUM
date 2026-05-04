@@ -3,6 +3,9 @@ using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
 using MimeKit;
 using SimulacroExamen.Data;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 
 namespace SimulacroExamen.Services
 {
@@ -11,13 +14,16 @@ namespace SimulacroExamen.Services
         private readonly IConfiguration _config;
         private readonly ApplicationDbContext _db;
         private readonly ISecretProtector _secretProtector;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         public EmailService(IConfiguration config, ApplicationDbContext db,
-                            ISecretProtector secretProtector)
+                            ISecretProtector secretProtector,
+                            IHttpClientFactory httpClientFactory)
         {
-            _config          = config;
-            _db              = db;
-            _secretProtector = secretProtector;
+            _config            = config;
+            _db                = db;
+            _secretProtector   = secretProtector;
+            _httpClientFactory = httpClientFactory;
         }
 
         public async Task EnviarAsync(string destinatario, string asunto, string cuerpoHtml)
@@ -62,15 +68,50 @@ namespace SimulacroExamen.Services
                 usarSsl   = true;
             }
 
+            if (smtp == "api.resend.com")
+                await EnviarViaResendAsync(destinatario, asunto, cuerpoHtml, usuario, remitente, contrasena);
+            else
+                await EnviarViaSmtpAsync(destinatario, asunto, cuerpoHtml, smtp, port, usuario, contrasena, usarSsl);
+        }
+
+        private async Task EnviarViaResendAsync(string destinatario, string asunto, string cuerpoHtml,
+                                                string desde, string remitente, string apiKey)
+        {
+            var payload = new
+            {
+                from    = $"{remitente} <{desde}>",
+                to      = new[] { destinatario },
+                subject = asunto,
+                html    = cuerpoHtml
+            };
+
+            var client  = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                throw new InvalidOperationException($"Resend API error {(int)response.StatusCode}: {body}");
+            }
+        }
+
+        private static async Task EnviarViaSmtpAsync(string destinatario, string asunto, string cuerpoHtml,
+                                                     string smtp, int port, string usuario,
+                                                     string contrasena, bool usarSsl)
+        {
             var mensaje = new MimeMessage();
-            mensaje.From.Add(new MailboxAddress(remitente, usuario));
+            mensaje.From.Add(new MailboxAddress(usuario, usuario));
             mensaje.To.Add(MailboxAddress.Parse(destinatario));
             mensaje.Subject = asunto;
             mensaje.Body    = new TextPart("html") { Text = cuerpoHtml };
 
             using var client = new SmtpClient();
-
-            // Puerto 465 → SSL implícito; puerto 587 (u otro) → STARTTLS
             var secureOption = port == 465
                 ? SecureSocketOptions.SslOnConnect
                 : SecureSocketOptions.StartTls;

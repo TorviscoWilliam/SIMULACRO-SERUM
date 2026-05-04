@@ -11,6 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ── Servicios MVC ───────────────────────────────────────────────
 builder.Services.AddControllersWithViews();
+builder.Services.AddHttpClient();
 
 // Necesario para que funcione correctamente detrás del proxy inverso (Azure/Railway).
 // No se hace .Clear() de KnownNetworks/KnownProxies: eso haría que la app confiase

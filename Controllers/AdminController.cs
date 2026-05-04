@@ -1951,6 +1951,7 @@ namespace SimulacroExamen.Controllers
         // service de la nube (169.254.169.254).
         private static readonly string[] DominiosSmtpPermitidos = new[]
         {
+            "api.resend.com",
             "smtp.gmail.com",
             "smtp-mail.outlook.com",
             "smtp.office365.com",
