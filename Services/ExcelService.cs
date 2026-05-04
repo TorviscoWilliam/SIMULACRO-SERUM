@@ -228,6 +228,18 @@ namespace SimulacroExamen.Services
         }
 
         // ── Exportar preguntas a Excel ───────────────────────────────
+        /// <summary>
+        /// Genera un archivo Excel con el listado completo de preguntas exportadas.
+        /// Columnas: ID, Tipo de Examen, Pregunta, Respuesta Correcta y hasta tres
+        /// opciones incorrectas, más la fecha de creación.
+        /// El encabezado usa fondo verde oscuro (#1a6b3a); filas pares con fondo
+        /// gris claro (#ecf0f1) para facilitar la lectura en pantalla.
+        /// </summary>
+        /// <param name="preguntas">
+        /// Lista de preguntas cargadas con sus <c>Alternativas</c> y <c>TipoExamen</c>
+        /// (eager-loaded) desde el AdminController.
+        /// </param>
+        /// <returns>Bytes del archivo .xlsx listos para devolver como FileResult.</returns>
         public byte[] ExportarPreguntas(List<Pregunta> preguntas)
         {
             using var wb = new XLWorkbook();
@@ -283,6 +295,21 @@ namespace SimulacroExamen.Services
         }
 
         // ── Importar usuarios desde Excel ─────────────────────────────
+        /// <summary>
+        /// Lee un archivo Excel con el formato de la plantilla de usuarios y devuelve
+        /// una lista de tuplas con los datos de cada fila válida.
+        /// Columnas esperadas (fila 1 = encabezado, se omite):
+        ///   Col A: Usuario (obligatorio, se convierte a MAYÚSCULAS)
+        ///   Col B: Correo  (obligatorio)
+        ///   Col C: Contraseña (obligatorio)
+        ///   Col D: Primer Nombre  (opcional)
+        ///   Col E: Primer Apellido (opcional)
+        ///   Col F: Celular (opcional)
+        ///   Col G: DNI (opcional)
+        /// Las filas con Usuario, Correo o Contraseña vacíos se descartan silenciosamente.
+        /// El hashing de contraseñas se realiza en el llamador (AdminController), no aquí.
+        /// </summary>
+        /// <param name="stream">Stream del archivo .xlsx subido por el administrador.</param>
         public List<(string Usuario, string Correo, string Contrasena, string? PrimerNombre,
                      string? PrimerApellido, string? Celular, string? Dni)> ImportarUsuarios(Stream stream)
         {
@@ -312,6 +339,13 @@ namespace SimulacroExamen.Services
         }
 
         // ── Plantilla para importar usuarios ─────────────────────────
+        /// <summary>
+        /// Genera una plantilla Excel vacía para la carga masiva de usuarios.
+        /// Incluye una fila de ejemplo (JUAN123) y una nota explicativa en fila 4.
+        /// Los campos obligatorios llevan asterisco (*) en el encabezado.
+        /// El fondo azul (#2980b9) distingue esta plantilla de la de preguntas (verde).
+        /// </summary>
+        /// <returns>Bytes del archivo .xlsx listos para devolver como FileResult.</returns>
         public byte[] GenerarPlantillaUsuarios()
         {
             using var wb = new XLWorkbook();

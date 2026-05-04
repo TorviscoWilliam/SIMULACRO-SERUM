@@ -5,12 +5,22 @@ using SimulacroExamen.Data;
 
 namespace SimulacroExamen.Services
 {
+    /// <summary>
+    /// Implementación de <see cref="IEmailService"/> que envía correos vía SMTP.
+    /// La configuración del servidor SMTP se obtiene primero desde la BD
+    /// (tabla ConfiguracionCorreo, gestionada por el SuperAdmin) y, si no existe
+    /// ningún registro, se recae en los valores de <c>appsettings.json</c>.
+    /// </summary>
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _config;
         private readonly ApplicationDbContext _db;
         private readonly ISecretProtector _secretProtector;
 
+        /// <summary>
+        /// Inyecta la configuración de la app, el contexto de BD y el servicio
+        /// de cifrado de secretos (para desproteger la contraseña SMTP guardada en BD).
+        /// </summary>
         public EmailService(IConfiguration config, ApplicationDbContext db,
                             ISecretProtector secretProtector)
         {
@@ -19,6 +29,17 @@ namespace SimulacroExamen.Services
             _secretProtector = secretProtector;
         }
 
+        // ── Envío de correo ──────────────────────────────────────────
+        /// <summary>
+        /// Envía un correo electrónico en formato HTML al destinatario indicado.
+        /// Resuelve la configuración SMTP en el siguiente orden de prioridad:
+        ///   1. Fila en la tabla <c>ConfiguracionCorreo</c> (configurada por el SuperAdmin).
+        ///   2. Sección <c>Email</c> de <c>appsettings.json</c> como fallback.
+        /// Lanza <see cref="InvalidOperationException"/> si ninguna fuente provee configuración válida.
+        /// </summary>
+        /// <param name="destinatario">Dirección de correo del receptor.</param>
+        /// <param name="asunto">Asunto del mensaje.</param>
+        /// <param name="cuerpoHtml">Cuerpo del mensaje en formato HTML.</param>
         public async Task EnviarAsync(string destinatario, string asunto, string cuerpoHtml)
         {
             // Intenta leer la configuración guardada por el SuperAdmin en la BD.

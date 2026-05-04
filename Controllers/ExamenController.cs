@@ -8,6 +8,12 @@ using SimulacroExamen.ViewModels;
 
 namespace SimulacroExamen.Controllers
 {
+    /// <summary>
+    /// Controlador principal para el flujo del estudiante: panel de inicio,
+    /// creación/reanudación de exámenes, envío de respuestas, historial,
+    /// configuración de cuenta, noticias y sugerencias.
+    /// Solo accesible por usuarios con el rol "Usuario".
+    /// </summary>
     [Authorize(Roles = "Usuario")]
     public class ExamenController : BaseController
     {
@@ -20,6 +26,9 @@ namespace SimulacroExamen.Controllers
         // Cada usuario tiene su propio semáforo; usuarios distintos no se bloquean.
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> _usuarioLocks = new();
 
+        /// <summary>
+        /// Inyecta el contexto de BD, la configuración de la app y el logger.
+        /// </summary>
         public ExamenController(ApplicationDbContext db, IConfiguration config,
                                 ILogger<ExamenController> log)
         {
@@ -29,6 +38,13 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── Panel principal: muestra los tipos de examen disponibles ──
+        /// <summary>
+        /// Muestra el dashboard del estudiante con estadísticas personales,
+        /// tipos de examen disponibles, gráfica de los últimos 10 resultados,
+        /// estado de suscripción/trial y cualquier examen pendiente de reanudar.
+        /// Varios bloques van en try/catch independientes para tolerar esquemas
+        /// de BD antiguos en Azure donde algunas columnas/tablas aún no existen.
+        /// </summary>
         public async Task<IActionResult> Index()
         {
             var uid = CurrentUserId;
@@ -195,6 +211,16 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Examen/IniciarExamen ───────────────────────────────
+        /// <summary>
+        /// Punto de entrada público para crear un nuevo examen.
+        /// Aplica un semáforo por usuario para evitar condiciones de carrera (TOCTOU)
+        /// en la verificación del límite diario. Delega la lógica real a
+        /// <see cref="IniciarExamenInterno"/> y atrapa cualquier excepción inesperada
+        /// mostrando un mensaje amigable en lugar de una pantalla de error 500.
+        /// </summary>
+        /// <param name="tipoExamenId">ID del TipoExamen seleccionado por el estudiante.</param>
+        /// <param name="duracionMinutosPersonalizada">Minutos elegidos por el estudiante; 0 = usar el default del tipo.</param>
+        /// <param name="numeroPreguntasOpcion">Cantidad de preguntas elegida; 0 = usar el default del tipo.</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> IniciarExamen(int tipoExamenId,
@@ -480,6 +506,16 @@ namespace SimulacroExamen.Controllers
         } // fin IniciarExamenInterno
 
         // ── POST /Examen/GuardarRespuesta (AJAX) ─────────────────────
+        /// <summary>
+        /// Guarda (o borra) la respuesta del estudiante a una pregunta individual.
+        /// Llamado vía AJAX desde la vista del examen cada vez que el usuario
+        /// selecciona o deselecciona una alternativa.
+        /// Valida que la PreguntaExamen pertenezca al usuario actual y que el
+        /// examen no esté ya completado antes de modificar el registro.
+        /// Devuelve 200 OK en éxito o 404 si la pregunta no existe/no es del usuario.
+        /// </summary>
+        /// <param name="preguntaExamenId">ID del registro PreguntaExamen a actualizar.</param>
+        /// <param name="alternativaId">ID de la alternativa elegida; null = deseleccionar.</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> GuardarRespuesta(int preguntaExamenId, int? alternativaId)
@@ -511,6 +547,13 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Examen/AbandonarExamen ──────────────────────────────
+        /// <summary>
+        /// Elimina permanentemente un examen incompleto del usuario actual junto
+        /// con todas sus PreguntasExamen asociadas, liberando así un intento diario
+        /// para que el estudiante pueda comenzar uno nuevo desde cero.
+        /// Si el examen no existe o ya fue completado, la operación es silenciosa (no-op).
+        /// </summary>
+        /// <param name="id">ID del examen a abandonar/eliminar.</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AbandonarExamen(int id)
@@ -533,6 +576,16 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Examen/Tomar/{id} ────────────────────────────────────
+        /// <summary>
+        /// Renderiza la vista de examen en curso para el estudiante.
+        /// Carga el examen con sus preguntas y alternativas; luego intenta
+        /// cargar el orden personalizado de alternativas (OrdenesAlternativaExamen)
+        /// en un bloque separado tolerante a fallos. Si la tabla no existe
+        /// en el esquema desplegado, se usa el orden original de la BD.
+        /// También calcula y expone el tiempo restante en segundos para el
+        /// cronómetro del frontend (null si el examen no tiene límite de tiempo).
+        /// </summary>
+        /// <param name="id">ID del examen a mostrar; debe pertenecer al usuario actual y estar incompleto.</param>
         public async Task<IActionResult> Tomar(int id)
         {
             // NO incluir OrdenesAlternativaExamen aquí: si la tabla no existe en Azure
@@ -618,6 +671,14 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Examen/Enviar ───────────────────────────────────────
+        /// <summary>
+        /// Recibe el formulario completo del examen, valida y persiste las respuestas
+        /// del estudiante, calcula el puntaje y marca el examen como completado.
+        /// Las respuestas llegan como campos con clave "respuesta_{PreguntaExamenId}".
+        /// Solo procesa alternativas que existan y pertenezcan a la pregunta correcta;
+        /// preguntas sin respuesta quedan con AlternativaSeleccionadaId = null.
+        /// Al finalizar redirige a la vista de Resultado.
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Enviar(IFormCollection form)
@@ -659,6 +720,15 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Examen/Resultado/{id} ────────────────────────────────
+        /// <summary>
+        /// Muestra el resultado detallado de un examen ya completado.
+        /// Incluye puntaje bruto, puntaje vigesimal, porcentaje de aciertos,
+        /// duración y el detalle pregunta a pregunta (respuesta correcta vs elegida).
+        /// Si el estudiante tiene una nota ponderada configurada, también calcula
+        /// la nota final combinada (70 % examen + 30 % nota ponderada).
+        /// Redirige al Historial si el examen no existe o no pertenece al usuario.
+        /// </summary>
+        /// <param name="id">ID del examen completado a mostrar.</param>
         public async Task<IActionResult> Resultado(int id)
         {
             var examen = await _db.Examenes
@@ -714,6 +784,10 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Examen/Configuracion ─────────────────────────────────
+        /// <summary>
+        /// Muestra el formulario de configuración personal del estudiante:
+        /// cambio de contraseña y actualización de la nota ponderada.
+        /// </summary>
         public async Task<IActionResult> Configuracion()
         {
             var usuario = await _db.Estudiantes.FirstOrDefaultAsync(u => u.Id == CurrentUserId);
@@ -727,6 +801,13 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Examen/Configuracion ────────────────────────────────
+        /// <summary>
+        /// Procesa los cambios de configuración personal del estudiante.
+        /// El cambio de contraseña es opcional: solo se ejecuta si el campo
+        /// <c>ContrasenaNueva</c> viene relleno, y requiere que la contraseña
+        /// actual sea correcta (verificada con BCrypt). La nota ponderada se
+        /// actualiza siempre independientemente del cambio de contraseña.
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Configuracion(ConfiguracionViewModel vm)
@@ -763,6 +844,12 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Examen/Noticias ──────────────────────────────────────
+        /// <summary>
+        /// Lista paginada de noticias activas, ordenadas de más reciente a más antigua.
+        /// Muestra 6 noticias por página. Pasa a la vista <c>Page</c> y <c>TotalPages</c>
+        /// para que el frontend construya la navegación de páginas.
+        /// </summary>
+        /// <param name="page">Número de página actual (1-indexado, default = 1).</param>
         public async Task<IActionResult> Noticias(int page = 1)
         {
             const int pageSize = 6;
@@ -794,6 +881,11 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Examen/Historial ─────────────────────────────────────
+        /// <summary>
+        /// Muestra todos los exámenes completados del usuario actual,
+        /// ordenados del más reciente al más antiguo, con el nombre del tipo
+        /// de examen incluido (eager-load de TipoExamen).
+        /// </summary>
         public async Task<IActionResult> Historial()
         {
             var examenes = await _db.Examenes
@@ -806,6 +898,10 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Examen/Sugerencias ───────────────────────────────────
+        /// <summary>
+        /// Muestra el formulario para enviar una sugerencia y el historial
+        /// de sugerencias previas del usuario actual, ordenadas de más reciente a más antigua.
+        /// </summary>
         public async Task<IActionResult> Sugerencias()
         {
             var uid = CurrentUserId;
@@ -818,6 +914,13 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Examen/Sugerencias ──────────────────────────────────
+        /// <summary>
+        /// Persiste una nueva sugerencia del usuario.
+        /// El asunto se trunca a 100 caracteres y el mensaje a 2000 para
+        /// coincidir con los límites definidos en la BD. Ambos campos son obligatorios.
+        /// </summary>
+        /// <param name="asunto">Asunto breve de la sugerencia (máx. 100 caracteres).</param>
+        /// <param name="mensaje">Cuerpo detallado de la sugerencia (máx. 2000 caracteres).</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Sugerencias(string asunto, string mensaje)

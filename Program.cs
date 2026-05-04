@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Servicios MVC ───────────────────────────────────────────────
 builder.Services.AddControllersWithViews();
 
 // Necesario para que funcione correctamente detrás del proxy inverso (Azure/Railway).
@@ -30,14 +31,33 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         System.Net.IPAddress.Parse("192.168.0.0"), 16));
 });
 
+// ── Contexto de base de datos ───────────────────────────────────
+// Usa SQL Server con la cadena de conexión "DefaultConnection" definida en
+// appsettings.json (desarrollo) o en las variables de entorno del host (producción).
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddDataProtection();
+// ── Servicios de aplicación ─────────────────────────────────────
+// ISecretProtector: cifra/descifra valores sensibles con DataProtection.
+// IExcelService: genera/importa archivos Excel de preguntas y resultados.
+// IEmailService: envía correos transaccionales (verificación, recuperación).
+
+// PersistKeysToDbContext guarda las claves de DataProtection en la tabla
+// DataProtectionKeys de la BD. Esto es crítico en Railway/contenedores:
+// sin persistencia las claves se regeneran en cada reinicio y la contraseña
+// SMTP cifrada queda ilegible, impidiendo el envío de correos.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<ApplicationDbContext>();
 builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
 builder.Services.AddScoped<IExcelService, ExcelService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
+// ── Autenticación por cookie ────────────────────────────────────
+// Se usa cookie propia (no sesión de servidor) para ser compatible con
+// ambientes sin estado (Railway, contenedores). La cookie se configura:
+//   - HttpOnly + Secure + SameSite=Strict → protección CSRF/XSS básica.
+//   - Sliding expiration de 8 h → la sesión se renueva con cada request,
+//     evitando cortes de sesión durante el trabajo activo del usuario.
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -53,14 +73,20 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 var app = builder.Build();
 
+// ── Pipeline de middleware ──────────────────────────────────────
+// ORDEN IMPORTANTE: los middleware se ejecutan en el orden en que se registran.
+// ForwardedHeaders debe ir primero para que el resto del pipeline vea la IP/esquema reales.
 app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {
+    // En producción, redirige errores no controlados al controlador de errores genérico.
+    // HSTS solo se activa en producción para no romper el flujo HTTP local del desarrollador.
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 
+// Redirige todo el tráfico HTTP a HTTPS antes de que llegue a cualquier otro middleware.
 app.UseHttpsRedirection();
 
 // ── Cabeceras de seguridad ──────────────────────────────────────
@@ -89,12 +115,20 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Sirve archivos de wwwroot (CSS, JS, imágenes) sin pasar por el enrutador MVC.
 app.UseStaticFiles();
+// UseRouting debe ir antes de UseAuthentication/UseAuthorization para que los
+// atributos [Authorize] de los endpoints se evalúen con la ruta ya conocida.
 app.UseRouting();
 app.UseAuthentication();
+// SessionValidationMiddleware comprueba que el token de sesión en la cookie
+// coincida con el almacenado en BD, invalidando sesiones concurrentes.
 app.UseMiddleware<SessionValidationMiddleware>();
 app.UseAuthorization();
 
+// ── Rutas MVC ───────────────────────────────────────────────────
+// La ruta por defecto lleva al Login en lugar de Home para forzar autenticación
+// en el primer acceso. Los controladores con [Authorize] redirigen aquí automáticamente.
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Account}/{action=Login}/{id?}");
@@ -112,7 +146,10 @@ using (var scope = app.Services.CreateScope())
     // Migrar columnas nuevas que no existían en versiones anteriores
     MigrarEsquema(context);
 
-    // Sembrar administrador principal (SuperAdmin) – solo si no existe
+    // ── Seeding: SuperAdmin ─────────────────────────────────────────
+    // Se busca por NombreUsuario para que sea idempotente en cada arranque.
+    // La contraseña se lee de configuración o variable de entorno; si falta,
+    // se aborta el arranque porque arrancar sin SuperAdmin sería un riesgo de seguridad.
     if (!context.Usuarios.Any(u => u.NombreUsuario == "LEAO.HUACAUSI"))
     {
         var superAdminPass = app.Configuration["DefaultUsers:SuperAdminPassword"]
@@ -131,7 +168,10 @@ using (var scope = app.Services.CreateScope())
         context.SaveChanges();
     }
 
-    // Sembrar administrador por defecto (contraseña cifrada con BCrypt)
+    // ── Seeding: Admin por defecto ──────────────────────────────────
+    // Se verifica en la tabla Usuarios (no en Administradores) porque la herencia TPH
+    // guarda ambos tipos en la misma tabla; Administradores filtra por Discriminador.
+    // La contraseña sigue el mismo patrón de configuración que el SuperAdmin.
     if (!context.Usuarios.Any(u => u.Rol == "Admin"))
     {
         var adminPass = app.Configuration["DefaultUsers:AdminPassword"]
@@ -150,7 +190,9 @@ using (var scope = app.Services.CreateScope())
         context.SaveChanges();
     }
 
-    // Sembrar los 17 tipos de examen
+    // ── Seeding: Tipos de examen ────────────────────────────────────
+    // Los 17 tipos corresponden a las especialidades de salud de la convocatoria SERUMS.
+    // La inserción es idempotente (Any por Nombre) por lo que puede repetirse en cada arranque.
     var tiposBase = new[]
     {
         "BIOLOGÍA",
@@ -181,7 +223,10 @@ using (var scope = app.Services.CreateScope())
     }
     context.SaveChanges();
 
-    // Sembrar planes de suscripción si no existen
+    // ── Seeding: Planes de suscripción ─────────────────────────────
+    // Se inserta el catálogo completo solo si la tabla está vacía.
+    // Las CaracteristicasPlan se crean junto con el plan en la misma operación
+    // aprovechando que EF Core resuelve las FKs antes de llamar a SaveChanges.
     if (!context.PlanesSuscripcion.Any())
     {
         context.PlanesSuscripcion.AddRange(
@@ -238,6 +283,12 @@ using (var scope = app.Services.CreateScope())
 app.Run();
 
 // ── Helper: agregar columnas/tablas nuevas sin romper la BD existente ────
+// POR QUÉ SQL dinámico en lugar de migraciones EF Core:
+//   EnsureCreated crea el esquema inicial completo, pero NO aplica cambios
+//   sobre tablas ya existentes. Si se añade una propiedad al modelo, EF Core
+//   no altera la tabla en producción. Este helper cubre ese hueco ejecutando
+//   sentencias ALTER/CREATE condicionales (IF NOT EXISTS) que son idempotentes:
+//   pueden correr N veces sin efecto dañino si la columna/tabla ya existe.
 static void MigrarEsquema(ApplicationDbContext context)
 {
     var conn = context.Database.GetDbConnection();
@@ -261,6 +312,16 @@ static void MigrarEsquema(ApplicationDbContext context)
         catch { /* sentencia individual falló; continuar con las demás */ }
     }
 
+    // Tabla para persistir claves de DataProtection entre reinicios del contenedor.
+    // Sin esta tabla las claves se regeneran con cada deploy y la contraseña SMTP
+    // cifrada queda ilegible, impidiendo el envío de correos.
+    Exec(@"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'DataProtectionKeys')
+           CREATE TABLE DataProtectionKeys (
+               Id           INT IDENTITY(1,1) PRIMARY KEY,
+               FriendlyName NVARCHAR(MAX) NULL,
+               Xml          NVARCHAR(MAX) NULL
+           )");
+
         // Columna NotaPonderada en Usuarios
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
@@ -274,6 +335,8 @@ static void MigrarEsquema(ApplicationDbContext context)
                ALTER TABLE Usuarios ADD IntentosExtra int NOT NULL DEFAULT 0");
 
         // Columnas de datos personales en Usuarios
+        // EnsureCreated no añade estas columnas a bases existentes; el loop
+        // es idempotente gracias al IF NOT EXISTS en cada ALTER TABLE.
         foreach (var col in new[] { "PrimerNombre", "SegundoNombre", "PrimerApellido", "SegundoApellido" })
         {
             Exec($@"IF NOT EXISTS (
@@ -281,10 +344,12 @@ static void MigrarEsquema(ApplicationDbContext context)
                        WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='{col}')
                    ALTER TABLE Usuarios ADD {col} NVARCHAR(100) NULL");
         }
+        // Columna Celular en Usuarios (añadida en versión posterior al despliegue inicial)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='Celular')
                ALTER TABLE Usuarios ADD Celular NVARCHAR(20) NULL");
+        // Columna Dni en Usuarios (añadida en versión posterior al despliegue inicial)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='Dni')
@@ -303,19 +368,19 @@ static void MigrarEsquema(ApplicationDbContext context)
                      AND CHARACTER_MAXIMUM_LENGTH < 128)
                ALTER TABLE Usuarios ALTER COLUMN SessionToken NVARCHAR(128) NULL");
 
-        // Columna EsTrial para modo prueba
+        // Columna EsTrial para modo prueba (permite acceso limitado sin suscripción activa)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='EsTrial')
                ALTER TABLE Usuarios ADD EsTrial BIT NOT NULL DEFAULT 0");
 
-        // Columna FechaVencimiento para suscripciones
+        // Columna FechaVencimiento para suscripciones (controla el acceso según el plan activo)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='FechaVencimiento')
                ALTER TABLE Usuarios ADD FechaVencimiento DATETIME2 NULL");
 
-        // Columnas para recuperación de contraseña
+        // Columnas para recuperación de contraseña (token de un solo uso con expiración)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='PasswordResetToken')
@@ -338,6 +403,7 @@ static void MigrarEsquema(ApplicationDbContext context)
         Exec(@"UPDATE Usuarios SET EmailVerificado = 1 WHERE EmailVerificado = 0 AND FechaCreacion < GETDATE()");
 
         // Columna PlanSuscripcionId en Usuarios (FK → PlanesSuscripcion, solo Estudiante)
+        // Se agrega via SQL dinámico porque EnsureCreated no altera tablas ya existentes.
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='PlanSuscripcionId')
@@ -350,6 +416,8 @@ static void MigrarEsquema(ApplicationDbContext context)
                END");
 
         // Columna Discriminador para herencia TPH (Administrador / Estudiante)
+        // Se agrega via SQL dinámico porque EnsureCreated no altera tablas ya existentes;
+        // la columna se rellena retroactivamente según el Rol para bases migradas.
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='Discriminador')
@@ -359,7 +427,7 @@ static void MigrarEsquema(ApplicationDbContext context)
                END");
 
 
-        // Columna DuracionSegundos en Examenes
+        // Columna DuracionSegundos en Examenes (registra el tiempo real consumido por el alumno)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Examenes' AND COLUMN_NAME='DuracionSegundos')
@@ -371,7 +439,7 @@ static void MigrarEsquema(ApplicationDbContext context)
                    WHERE TABLE_NAME='TiposExamen' AND COLUMN_NAME='DuracionMinutos')
                ALTER TABLE TiposExamen ADD DuracionMinutos INT NULL");
 
-        // Columna NumeroPreguntas en TiposExamen (bases existentes sin esta columna)
+        // Columna NumeroPreguntas en TiposExamen (bases existentes sin esta columna; default 20)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='TiposExamen' AND COLUMN_NAME='NumeroPreguntas')
@@ -560,7 +628,7 @@ Participa en **sorteos exclusivos.**',
                        REFERENCES TiposExamen(Id) ON DELETE CASCADE
                )");
 
-        // Columna NumeroPreguntas en OpcionesDuracion (bases ya creadas)
+        // Columna NumeroPreguntas en OpcionesDuracion (agregada después del despliegue inicial de la tabla)
         Exec(@"IF NOT EXISTS (
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='OpcionesDuracion' AND COLUMN_NAME='NumeroPreguntas')

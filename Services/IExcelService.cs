@@ -2,6 +2,12 @@ using SimulacroExamen.ViewModels;
 
 namespace SimulacroExamen.Services
 {
+    /// <summary>
+    /// Contrato para el servicio de operaciones Excel del sistema.
+    /// Define métodos para importar preguntas y usuarios desde archivos .xlsx,
+    /// exportar listados a Excel y generar plantillas de carga.
+    /// La implementación concreta (<see cref="ExcelService"/>) usa ClosedXML.
+    /// </summary>
     public interface IExcelService
     {
         /// <summary>

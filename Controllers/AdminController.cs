@@ -8,6 +8,11 @@ using SimulacroExamen.ViewModels;
 
 namespace SimulacroExamen.Controllers
 {
+    /// <summary>
+    /// Panel de administración central. Gestiona usuarios, preguntas, tipos de examen,
+    /// noticias, planes de suscripción, anuncios globales, estadísticas y configuración
+    /// de correo. Accesible únicamente por los roles <c>Admin</c> y <c>SuperAdmin</c>.
+    /// </summary>
     [Authorize(Roles = "Admin,SuperAdmin")]
     public class AdminController : BaseController
     {
@@ -19,6 +24,9 @@ namespace SimulacroExamen.Controllers
         private readonly ILogger<AdminController> _log;
         private readonly ISecretProtector         _secretProtector;
 
+        /// <summary>
+        /// Inyecta todas las dependencias necesarias para el panel admin.
+        /// </summary>
         public AdminController(ApplicationDbContext db, IExcelService excel,
                                IWebHostEnvironment env, IEmailService email,
                                IConfiguration config, ILogger<AdminController> log,
@@ -34,6 +42,15 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── Dashboard ────────────────────────────────────────────────
+        /// <summary>
+        /// Vista principal del panel de administración.
+        /// Muestra estadísticas globales (totales de usuarios, preguntas y exámenes),
+        /// métricas del día filtrado (tasa de aprobación, mejor puntaje), gráfico de
+        /// barras de exámenes de los últimos 7 días, gráfico de dona por tipo de examen
+        /// y un ranking Top-10 filtrable por fecha y nombre de usuario.
+        /// </summary>
+        /// <param name="fecha">Fecha a filtrar; si es null se usa la fecha actual.</param>
+        /// <param name="usuario">Fragmento de nombre de usuario para filtrar el ranking.</param>
         public async Task<IActionResult> Index(DateTime? fecha, string? usuario)
         {
             var hoy    = DateTime.Today;
@@ -155,6 +172,12 @@ namespace SimulacroExamen.Controllers
         //  USUARIOS
         // ═══════════════════════════════════════════════════════════
 
+        /// <summary>
+        /// Lista paginada de todos los usuarios del sistema (estudiantes y administradores).
+        /// Enriquece cada registro con el nombre del plan de suscripción asignado para
+        /// evitar N+1 queries: carga los planes en un único query adicional.
+        /// </summary>
+        /// <param name="page">Número de página (base 1).</param>
         public async Task<IActionResult> Usuarios(int page = 1)
         {
             const int pageSize = 15;
@@ -224,6 +247,13 @@ namespace SimulacroExamen.Controllers
         }
 
         // POST /Admin/AjustarIntentos
+        /// <summary>
+        /// Establece la cantidad de intentos de examen diarios extra para un estudiante.
+        /// El total de intentos diarios efectivos es 5 (base) + <paramref name="intentosExtra"/>.
+        /// Solo aplica a estudiantes; retorna error si el usuario es un administrador.
+        /// </summary>
+        /// <param name="id">ID del usuario a modificar.</param>
+        /// <param name="intentosExtra">Intentos adicionales (mínimo 0).</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AjustarIntentos(int id, int intentosExtra)
@@ -242,8 +272,14 @@ namespace SimulacroExamen.Controllers
             return RedirectToAction(nameof(Usuarios));
         }
 
+        /// <summary>Muestra el formulario para crear un nuevo usuario manualmente.</summary>
         public IActionResult CrearUsuario() => View(new CrearUsuarioViewModel());
 
+        /// <summary>
+        /// Crea un nuevo usuario (estudiante o administrador) desde el panel admin.
+        /// Valida unicidad de nombre de usuario y correo, aplica la jerarquía de roles
+        /// (un Admin no puede crear SuperAdmins) y hashea la contraseña con BCrypt.
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CrearUsuario(CrearUsuarioViewModel vm)
@@ -303,6 +339,12 @@ namespace SimulacroExamen.Controllers
         }
 
         // GET /Admin/EditarUsuario/{id}
+        /// <summary>
+        /// Carga el formulario de edición de un usuario existente.
+        /// Bloquea la edición de cuentas SuperAdmin para usuarios que no tengan ese rol.
+        /// Carga también los planes de suscripción disponibles para mostrarlos en el select.
+        /// </summary>
+        /// <param name="id">ID del usuario a editar.</param>
         public async Task<IActionResult> EditarUsuario(int id)
         {
             var usuario = await _db.Usuarios.FindAsync(id);
@@ -338,6 +380,12 @@ namespace SimulacroExamen.Controllers
             return View(vm);
         }
 
+        /// <summary>
+        /// Persiste los cambios de un usuario editado. Valida unicidad de nombre y correo
+        /// excluyendo el propio ID, controla la jerarquía de roles e impide cambiar el
+        /// tipo discriminador (Estudiante ↔ Administrador) sin eliminar y recrear el registro.
+        /// Solo actualiza la contraseña si se proporcionó una nueva en el formulario.
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditarUsuario(EditarUsuarioViewModel vm)
@@ -419,6 +467,11 @@ namespace SimulacroExamen.Controllers
             return RedirectToAction(nameof(Usuarios));
         }
 
+        /// <summary>
+        /// Activa o desactiva un usuario. Impide que el admin se desactive a sí mismo
+        /// y que un Admin (no SuperAdmin) desactive una cuenta SuperAdmin.
+        /// </summary>
+        /// <param name="id">ID del usuario a alternar.</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ToggleUsuario(int id)
@@ -452,6 +505,13 @@ namespace SimulacroExamen.Controllers
         }
 
         // POST /Admin/ActivarAccesoCompleto/{id}
+        /// <summary>
+        /// Promueve a un estudiante de modo trial a acceso completo.
+        /// Si no tiene fecha de vencimiento o ya venció, establece 30 días desde hoy.
+        /// Opcionalmente asigna un plan de suscripción. Registra el cambio en el log de actividad.
+        /// </summary>
+        /// <param name="id">ID del estudiante a promover.</param>
+        /// <param name="planId">ID del plan de suscripción a asignar (opcional).</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ActivarAccesoCompleto(int id, int? planId)
@@ -1994,6 +2054,60 @@ namespace SimulacroExamen.Controllers
                 Fecha       = DateTime.Now
             });
             await _db.SaveChangesAsync();
+        }
+
+        // ── GET /Admin/SuscriptoresMes — Solo SuperAdmin ───────────
+        /// <summary>
+        /// Muestra estudiantes registrados en el mes/año indicado que ya tienen
+        /// un plan de suscripción asignado. Solo accesible por SuperAdmin.
+        /// </summary>
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> SuscriptoresMes(int? mes, int? anio)
+        {
+            var ahora = DateTime.Now;
+            int m = (mes  >= 1 && mes  <= 12) ? mes!.Value  : ahora.Month;
+            int a = (anio >= 2020 && anio <= ahora.Year) ? anio!.Value : ahora.Year;
+
+            var inicio = new DateTime(a, m, 1);
+            var fin    = inicio.AddMonths(1);
+
+            var suscriptores = await _db.Estudiantes
+                .Where(e => e.PlanSuscripcionId != null
+                         && e.FechaCreacion >= inicio
+                         && e.FechaCreacion <  fin)
+                .Select(e => new SuscriptorFilaVM
+                {
+                    Id               = e.Id,
+                    NombreCompleto   = (e.PrimerNombre + " " + e.PrimerApellido).Trim(),
+                    NombreUsuario    = e.NombreUsuario,
+                    Correo           = e.Correo,
+                    Celular          = e.Celular ?? "",
+                    NombrePlan       = e.PlanSuscripcion!.Nombre,
+                    PrecioPlan       = e.PlanSuscripcion.Precio,
+                    FechaRegistro    = e.FechaCreacion,
+                    FechaVencimiento = e.FechaVencimiento,
+                    Activo           = e.Activo,
+                })
+                .OrderByDescending(s => s.FechaRegistro)
+                .ToListAsync();
+
+            // Selector: últimos 12 meses para el desplegable de período
+            var meses = Enumerable.Range(0, 12)
+                .Select(i => new DateTime(ahora.Year, ahora.Month, 1).AddMonths(-i))
+                .Select(d => (d.Month, d.Year,
+                    d.ToString("MMMM yyyy",
+                        System.Globalization.CultureInfo.GetCultureInfo("es-PE"))))
+                .ToList();
+
+            var vm = new SuscriptoresMesViewModel
+            {
+                Suscriptores     = suscriptores,
+                Mes              = m,
+                Anio             = a,
+                MesesDisponibles = meses,
+            };
+
+            return View(vm);
         }
     }
 }

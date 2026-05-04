@@ -12,10 +12,16 @@ using System.Security.Cryptography;
 
 namespace SimulacroExamen.Controllers
 {
+    /// <summary>
+    /// Maneja todo el flujo de identidad del usuario: inicio de sesión,
+    /// registro, cierre de sesión, recuperación de contraseña y verificación
+    /// de correo electrónico.
+    /// </summary>
     public class AccountController : Controller
     {
-        private readonly ApplicationDbContext _db;
-        private readonly IEmailService        _email;
+        private readonly ApplicationDbContext    _db;
+        private readonly IEmailService           _email;
+        private readonly ILogger<AccountController> _log;
 
         // ── Protección anti fuerza bruta (en memoria) ─────────────
         private static readonly ConcurrentDictionary<string, (int intentos, DateTime bloqueoHasta)> _loginIntentos = new();
@@ -27,13 +33,24 @@ namespace SimulacroExamen.Controllers
         private static string GenerarTokenSeguro() =>
             Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
-        public AccountController(ApplicationDbContext db, IEmailService email)
+        /// <summary>
+        /// Inyecta el contexto de base de datos y el servicio de correo.
+        /// </summary>
+        public AccountController(ApplicationDbContext db, IEmailService email,
+                                 ILogger<AccountController> log)
         {
             _db    = db;
             _email = email;
+            _log   = log;
         }
 
         // ── GET /Account/Login ───────────────────────────────────────
+        /// <summary>
+        /// Muestra el formulario de inicio de sesión.
+        /// Redirige automáticamente al dashboard correspondiente si el usuario
+        /// ya tiene una sesión activa.
+        /// </summary>
+        /// <param name="returnUrl">URL a la que redirigir tras el login exitoso (opcional).</param>
         [HttpGet]
         public IActionResult Login(string? returnUrl = null)
         {
@@ -44,6 +61,12 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Account/Login ──────────────────────────────────────
+        /// <summary>
+        /// Procesa las credenciales enviadas por el formulario de login.
+        /// Aplica rate-limiting por IP, verifica contraseña con BCrypt,
+        /// genera un SessionToken único para invalidar sesiones anteriores
+        /// y emite la cookie de autenticación.
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Login(LoginViewModel vm)
@@ -134,6 +157,13 @@ namespace SimulacroExamen.Controllers
         // ── POST /Account/Verificar ──────────────────────────────────
         // Antes era GET — se cambió a POST con token CSRF para evitar
         // enumeración masiva desde otros sitios o por scraping.
+        /// <summary>
+        /// Verifica en tiempo real si un campo único (usuario, correo, celular o DNI)
+        /// ya está en uso. Usado por AJAX durante el registro para dar feedback inmediato.
+        /// Responde con <c>{ ocupado: bool }</c>.
+        /// </summary>
+        /// <param name="campo">Nombre del campo a verificar: "usuario", "correo", "celular" o "dni".</param>
+        /// <param name="valor">Valor a comprobar contra la base de datos.</param>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Verificar(string campo, string valor)
@@ -165,6 +195,10 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Account/Register ────────────────────────────────────
+        /// <summary>
+        /// Muestra el formulario de auto-registro de estudiantes.
+        /// Carga los tipos de examen activos para que el usuario elija su modalidad.
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> Register()
         {
@@ -180,6 +214,13 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Account/Register ───────────────────────────────────
+        /// <summary>
+        /// Crea un nuevo estudiante a partir del formulario de registro.
+        /// Valida unicidad de correo, celular y DNI; genera el nombre de usuario
+        /// automáticamente (NOMBRE.APELLIDO con fallbacks si hay colisión);
+        /// hashea la contraseña con BCrypt; asigna el tipo de examen elegido;
+        /// y envía un correo de verificación.
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Register(RegisterViewModel vm)
@@ -319,7 +360,7 @@ namespace SimulacroExamen.Controllers
 </div>";
 
             try { await _email.EnviarAsync(nuevoUsuario.Correo, "Verifica tu correo – Simulacro SERUMS", cuerpoVerif); }
-            catch { /* No bloquear registro si el email falla */ }
+            catch (Exception ex) { _log.LogError(ex, "No se pudo enviar correo de verificación a {Correo}", nuevoUsuario.Correo); }
 
             TempData["CorreoEnviado"] = nuevoUsuario.Correo;
             return RedirectToAction(nameof(VerificacionPendiente));
@@ -328,6 +369,10 @@ namespace SimulacroExamen.Controllers
         // ── POST /Account/Logout ─────────────────────────────────────
         // Solo POST con token CSRF: evita que un tercero pueda forzar el logout
         // mediante <img src="/Account/Logout"> o similares.
+        /// <summary>
+        /// Cierra la sesión del usuario eliminando la cookie de autenticación.
+        /// Solo acepta POST para proteger contra ataques de logout por referencia cruzada (CSRF).
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()
@@ -337,13 +382,24 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── GET /Account/AccesoDenegado ──────────────────────────────
+        /// <summary>
+        /// Vista de acceso denegado. ASP.NET Core redirige aquí automáticamente
+        /// cuando un usuario autenticado intenta acceder a un recurso para el
+        /// que no tiene el rol requerido.
+        /// </summary>
         public IActionResult AccesoDenegado() => View();
 
         // ── GET /Account/OlvideMiContrasena ──────────────────────────
+        /// <summary>Muestra el formulario para solicitar el restablecimiento de contraseña.</summary>
         [HttpGet]
         public IActionResult OlvideMiContrasena() => View();
 
         // ── POST /Account/OlvideMiContrasena ─────────────────────────
+        /// <summary>
+        /// Genera un token de restablecimiento con expiración de 1 hora y envía
+        /// el enlace al correo del usuario. Siempre muestra el mismo mensaje de
+        /// éxito, sin revelar si el correo existe en el sistema (previene enumeración).
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OlvideMiContrasena(string correo)
@@ -390,13 +446,18 @@ namespace SimulacroExamen.Controllers
 </div>";
 
                 try { await _email.EnviarAsync(usuario.Correo, "Restablecer contraseña – Simulacro SERUMS", cuerpo); }
-                catch { /* No exponer errores de SMTP al usuario */ }
+                catch (Exception ex) { _log.LogError(ex, "No se pudo enviar correo de recuperación a {Correo}", usuario.Correo); }
             }
 
             return RedirectToAction(nameof(Login));
         }
 
         // ── GET /Account/ResetearContrasena ──────────────────────────
+        /// <summary>
+        /// Valida el token de restablecimiento (debe existir en BD y no haber expirado)
+        /// y, si es válido, muestra el formulario para introducir la nueva contraseña.
+        /// </summary>
+        /// <param name="token">Token hexadecimal incluido en el enlace del email.</param>
         [HttpGet]
         public async Task<IActionResult> ResetearContrasena(string token)
         {
@@ -418,6 +479,10 @@ namespace SimulacroExamen.Controllers
         }
 
         // ── POST /Account/ResetearContrasena ─────────────────────────
+        /// <summary>
+        /// Aplica la nueva contraseña (hasheada con BCrypt), invalida el token de reset
+        /// y anula el SessionToken activo para forzar re-login en todos los dispositivos.
+        /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ResetearContrasena(string token, string nuevaContrasena, string confirmar)
@@ -522,7 +587,7 @@ namespace SimulacroExamen.Controllers
 </div>";
 
                 try { await _email.EnviarAsync(usuario.Correo, "Verifica tu correo – Simulacro SERUMS", cuerpo); }
-                catch { /* No exponer errores SMTP */ }
+                catch (Exception ex) { _log.LogError(ex, "No se pudo reenviar correo de verificación a {Correo}", usuario.Correo); }
             }
 
             TempData["CorreoEnviado"] = correo;

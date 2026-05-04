@@ -1,0 +1,218 @@
+@model SimulacroExamen.ViewModels.SuscriptoresMesViewModel
+@{
+    ViewData["Title"] = "Suscriptores del Mes";
+}
+
+<!-- Encabezado -->
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-person-check-fill me-2 text-success"></i>Suscriptores del Mes
+        </h2>
+        <p class="text-muted mb-0">Usuarios registrados en <strong>@Model.MesNombre</strong> con plan activo</p>
+    </div>
+    <span class="badge bg-danger fs-6 px-3 py-2">
+        <i class="bi bi-shield-lock-fill me-1"></i>Solo SuperAdmin
+    </span>
+</div>
+
+<!-- Selector de mes + resumen -->
+<div class="row g-3 mb-4">
+
+    <!-- Selector de período -->
+    <div class="col-12 col-md-5">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-calendar3 me-1"></i>Seleccionar período</h6>
+                <form method="get" asp-action="SuscriptoresMes" class="d-flex gap-2 align-items-end">
+                    <div class="flex-grow-1">
+                        <label class="form-label small text-muted mb-1">Mes</label>
+                        <select name="mes" class="form-select form-select-sm" onchange="this.form.submit()">
+                            @foreach (var (mes, anio, etiqueta) in Model.MesesDisponibles)
+                            {
+                                <option value="@mes"
+                                        data-anio="@anio"
+                                        @(mes == Model.Mes && anio == Model.Anio ? "selected" : "")>
+                                    @etiqueta
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <input type="hidden" name="anio" id="anioHidden" value="@Model.Anio" />
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-funnel-fill"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarjeta: total suscriptores -->
+    <div class="col-6 col-md-2">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-success">
+            <div class="card-body text-center py-3">
+                <div class="fs-1 fw-bold text-success">@Model.Total</div>
+                <div class="small text-muted">Suscriptores</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarjeta: ingreso estimado -->
+    <div class="col-6 col-md-2">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-primary">
+            <div class="card-body text-center py-3">
+                <div class="fs-4 fw-bold text-primary">S/ @Model.IngresoEstimado.ToString("0.00")</div>
+                <div class="small text-muted">Ingreso estimado</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarjeta: activos -->
+    <div class="col-6 col-md-1">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-info">
+            <div class="card-body text-center py-3">
+                <div class="fs-2 fw-bold text-info">@Model.Suscriptores.Count(s => s.Activo)</div>
+                <div class="small text-muted">Activos</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarjeta: inactivos -->
+    <div class="col-6 col-md-2">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-warning">
+            <div class="card-body text-center py-3">
+                <div class="fs-2 fw-bold text-warning">@Model.Suscriptores.Count(s => !s.Activo)</div>
+                <div class="small text-muted">Inactivos</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Tabla de suscriptores -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 py-3 d-flex align-items-center justify-content-between">
+        <h6 class="fw-semibold mb-0">
+            <i class="bi bi-table me-1"></i>Detalle de suscriptores — @Model.MesNombre
+        </h6>
+        @if (Model.Total > 0)
+        {
+            <span class="badge bg-success">@Model.Total registros</span>
+        }
+    </div>
+    <div class="card-body p-0">
+
+        @if (!Model.Suscriptores.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                No hay suscriptores registrados en <strong>@Model.MesNombre</strong>.
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tablaSuscriptores">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Nombre completo</th>
+                            <th>Usuario</th>
+                            <th>Correo</th>
+                            <th>Celular</th>
+                            <th>Plan</th>
+                            <th>Precio</th>
+                            <th>Fecha registro</th>
+                            <th>Vencimiento</th>
+                            <th>Estado</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (s, i) in Model.Suscriptores.Select((s, i) => (s, i + 1)))
+                        {
+                            var vencido = s.FechaVencimiento.HasValue && s.FechaVencimiento.Value < DateTime.Now;
+                            <tr>
+                                <td class="text-muted small">@i</td>
+                                <td class="fw-semibold">@s.NombreCompleto</td>
+                                <td><code class="small">@s.NombreUsuario</code></td>
+                                <td class="small">@s.Correo</td>
+                                <td class="small">@(string.IsNullOrEmpty(s.Celular) ? "—" : s.Celular)</td>
+                                <td>
+                                    <span class="badge bg-primary rounded-pill">@s.NombrePlan</span>
+                                </td>
+                                <td class="fw-semibold text-success">S/ @s.PrecioPlan.ToString("0.00")</td>
+                                <td class="small">@s.FechaRegistro.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td class="small">
+                                    @if (s.FechaVencimiento.HasValue)
+                                    {
+                                        <span class="@(vencido ? "text-danger" : "text-success")">
+                                            <i class="bi bi-@(vencido ? "x-circle" : "check-circle") me-1"></i>
+                                            @s.FechaVencimiento.Value.ToString("dd/MM/yyyy")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Sin límite</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (s.Activo)
+                                    {
+                                        <span class="badge bg-success-subtle text-success">Activo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary">Inactivo</span>
+                                    }
+                                </td>
+                                <td>
+                                    <a asp-action="EditarUsuario" asp-route-id="@s.Id"
+                                       class="btn btn-sm btn-outline-secondary" title="Ver usuario">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Resumen por plan (pie chart) -->
+            <div class="border-top px-4 py-3">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <p class="small text-muted mb-2 fw-semibold">Distribución por plan:</p>
+                        @foreach (var grupo in Model.Suscriptores.GroupBy(s => s.NombrePlan).OrderByDescending(g => g.Count()))
+                        {
+                            var pct = Model.Total > 0 ? (int)Math.Round(grupo.Count() * 100.0 / Model.Total) : 0;
+                            <div class="mb-2">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span>@grupo.Key</span>
+                                    <span class="fw-semibold">@grupo.Count() (@pct%)</span>
+                                </div>
+                                <div class="progress" style="height:6px">
+                                    <div class="progress-bar bg-primary" style="width:@pct%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <p class="small text-muted mb-1">Total recaudado estimado:</p>
+                        <span class="fs-4 fw-bold text-primary">S/ @Model.IngresoEstimado.ToString("0.00")</span>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Actualizar el año oculto según la opción seleccionada en el selector de mes
+        document.querySelector('select[name="mes"]').addEventListener('change', function () {
+            var selected = this.options[this.selectedIndex];
+            document.getElementById('anioHidden').value = selected.dataset.anio;
+        });
+    </script>
+}
