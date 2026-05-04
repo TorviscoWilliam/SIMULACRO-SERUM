@@ -19,16 +19,15 @@ builder.Services.AddControllersWithViews();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit     = 1; // solo aceptar 1 header; evita stacking malicioso
+    options.ForwardLimit     = 1;
 
-    // Plataformas como Railway o nginx-proxy reenvían desde IPs privadas que
-    // no siempre son loopback. Añadimos los rangos RFC1918 típicos de contenedores.
-    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-        System.Net.IPAddress.Parse("10.0.0.0"), 8));
-    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-        System.Net.IPAddress.Parse("172.16.0.0"), 12));
-    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-        System.Net.IPAddress.Parse("192.168.0.0"), 16));
+    // Railway termina TLS en su edge y reenvía internamente por IPs privadas
+    // que no son siempre loopback ni rangos RFC1918 conocidos. Limpiamos los
+    // filtros para que el middleware procese los headers independientemente de
+    // la IP del proxy. El contenedor no es accesible públicamente en Railway,
+    // por lo que confiar en los headers internos es seguro.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // ── Contexto de base de datos ───────────────────────────────────

@@ -12,5 +12,5 @@ RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 FROM base AS final
 WORKDIR /app
 COPY --from=build /app/publish .
-ENV ASPNETCORE_URLS=http://+:8080
-ENTRYPOINT ["dotnet", "SimulacroExamen.dll"]
+# PORT es inyectado dinámicamente por Railway; fallback a 8080 para entornos locales
+ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://+:${PORT:-8080} dotnet SimulacroExamen.dll"]
