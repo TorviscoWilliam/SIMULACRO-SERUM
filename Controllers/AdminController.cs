@@ -1975,8 +1975,9 @@ namespace SimulacroExamen.Controllers
                 return View(vm);
             }
 
-            // Validar puerto (solo los estándares de SMTP saliente)
-            if (vm.Puerto != 25 && vm.Puerto != 465 && vm.Puerto != 587 && vm.Puerto != 2525)
+            // Para Resend (API HTTP) el puerto no aplica; solo validar en SMTP clásico
+            if (smtpNormalizado != "api.resend.com" &&
+                vm.Puerto != 25 && vm.Puerto != 465 && vm.Puerto != 587 && vm.Puerto != 2525)
             {
                 ModelState.AddModelError(nameof(vm.Puerto),
                     "Puerto SMTP inválido. Valores permitidos: 25, 465, 587, 2525.");
