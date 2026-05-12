@@ -5,9 +5,10 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["SimulacroExamen.csproj", "."]
-RUN dotnet restore
+RUN dotnet restore SimulacroExamen.csproj
 COPY . .
-RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
+# Publicar solo el proyecto web, no la solución completa (que incluye los tests)
+RUN dotnet publish SimulacroExamen.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app

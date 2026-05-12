@@ -8,10 +8,21 @@
     <AssemblyName>SimulacroExamen</AssemblyName>
   </PropertyGroup>
 
+  <!--
+    Excluye el proyecto de tests del compilado del proyecto web principal.
+    Sin esto, MSBuild incluye por defecto todos los .cs bajo la raíz y trata de
+    compilar los archivos de SimulacroExamen.Tests sin tener referencia a xUnit.
+  -->
+  <ItemGroup>
+    <Compile Remove="SimulacroExamen.Tests/**/*.cs" />
+    <Content Remove="SimulacroExamen.Tests/**/*" />
+    <None Remove="SimulacroExamen.Tests/**/*" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="ClosedXML" Version="0.102.2" />
-    <PackageReference Include="MailKit" Version="4.7.1.1" />
+    <PackageReference Include="MailKit" Version="4.12.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Cookies" Version="2.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
