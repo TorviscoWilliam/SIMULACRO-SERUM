@@ -348,16 +348,21 @@ app.Run();
 //   pueden correr N veces sin efecto dañino si la columna/tabla ya existe.
 static void MigrarEsquema(ApplicationDbContext context)
 {
+    var migLog = context.GetService<ILoggerFactory>().CreateLogger("MigrarEsquema");
     var conn = context.Database.GetDbConnection();
     try
     {
         if (conn.State != System.Data.ConnectionState.Open)
             conn.Open();
     }
-    catch { return; } // Sin conexión no hay nada que hacer
+    catch (Exception ex)
+    {
+        migLog.LogCritical(ex, "MigrarEsquema: no se pudo abrir la conexión a la BD. Las columnas no se crearán.");
+        return;
+    }
 
     // Cada sentencia falla de forma independiente: si una falla,
-    // las demás siguen ejecutándose (evita que un catch global las bloquee).
+    // las demás siguen ejecutándose. Los errores se loguean para diagnóstico.
     void Exec(string sql)
     {
         try
@@ -366,7 +371,11 @@ static void MigrarEsquema(ApplicationDbContext context)
             cmd.CommandText = sql;
             cmd.ExecuteNonQuery();
         }
-        catch { /* sentencia individual falló; continuar con las demás */ }
+        catch (Exception ex)
+        {
+            // Log completo del error para poder diagnosticar en producción.
+            migLog.LogError(ex, "MigrarEsquema: falló la sentencia SQL: {Sql}", sql.Split('\n')[0].Trim());
+        }
     }
 
     // Tabla para persistir claves de DataProtection entre reinicios del contenedor.
@@ -428,6 +437,25 @@ static void MigrarEsquema(ApplicationDbContext context)
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='FechaBaneo')
                ALTER TABLE Usuarios ADD FechaBaneo DATETIME2 NULL");
+
+        // Diagnóstico: verificar que las columnas anti brute-force existen tras la migración.
+        // Si no existen, el bloqueo por usuario no funcionará en runtime y se logueará un error.
+        try
+        {
+            using var chk = conn.CreateCommand();
+            chk.CommandText = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                                 WHERE TABLE_NAME='Usuarios'
+                                   AND COLUMN_NAME IN ('IntentosFallidos','FechaBaneo')";
+            var count = (int)chk.ExecuteScalar()!;
+            if (count == 2)
+                migLog.LogInformation("MigrarEsquema: columnas anti brute-force verificadas OK (IntentosFallidos, FechaBaneo).");
+            else
+                migLog.LogError("MigrarEsquema: faltan columnas anti brute-force. Se encontraron {Count}/2. El bloqueo por usuario NO funcionará.", count);
+        }
+        catch (Exception ex)
+        {
+            migLog.LogError(ex, "MigrarEsquema: no se pudo verificar las columnas anti brute-force.");
+        }
 
         // Ampliar SessionToken si aún tiene el tamaño antiguo de 36
         Exec(@"IF EXISTS (

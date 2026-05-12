@@ -96,8 +96,11 @@ namespace SimulacroExamen.Controllers
                 return View(vm);
             }
 
-            // Búsqueda case-insensitive: todos los nombres nuevos son uppercase
-            var nombreBusqueda = vm.NombreUsuario.Trim().ToUpperInvariant();
+            // Sanitizar: solo letras, dígitos y punto (formato NOMBRE.APELLIDO).
+            // Cualquier otro carácter se descarta antes de tocar la BD.
+            var nombreBusqueda = System.Text.RegularExpressions.Regex
+                .Replace(vm.NombreUsuario.Trim(), @"[^\w\.]", "")
+                .ToUpperInvariant();
             var usuario = await _db.Usuarios
                 .FirstOrDefaultAsync(u => u.NombreUsuario == nombreBusqueda && u.Activo);
 
@@ -127,9 +130,12 @@ namespace SimulacroExamen.Controllers
                     try { await _db.SaveChangesAsync(); }
                     catch (Exception ex)
                     {
-                        // Si las columnas IntentosFallidos/FechaBaneo no existen aún
-                        // (esquema desactualizado), no bloqueamos el flujo del login.
-                        _log.LogWarning(ex, "No se pudo persistir contador anti brute-force.");
+                        // Columnas ausentes o error de BD: no cortamos el flujo del login,
+                        // pero logueamos el error completo para diagnóstico.
+                        _log.LogError(ex,
+                            "No se pudo persistir IntentosFallidos/FechaBaneo para usuario {Id}. " +
+                            "Causa probable: columnas no migradas. Inner: {Inner}",
+                            usuario.Id, ex.InnerException?.Message ?? ex.Message);
                         _db.Entry(usuario).State = EntityState.Unchanged;
                     }
                 }

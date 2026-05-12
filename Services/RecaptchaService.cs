@@ -24,17 +24,18 @@ namespace SimulacroExamen.Services
 
         public async Task<bool> VerificarAsync(string? token, string accion, double scoreMinimo)
         {
-            // Sin token, falla. No revelar al cliente; el controller mostrará el error.
-            if (string.IsNullOrWhiteSpace(token)) return false;
-
-            // Si no hay SecretKey configurado, asumimos entorno de desarrollo y permitimos.
-            // En producción siempre debe configurarse (variable de entorno Recaptcha__SecretKey).
+            // La comprobación de SecretKey va ANTES que la del token: si no hay SecretKey
+            // tampoco hay SiteKey en la vista → el script JS no carga → el token siempre
+            // llega vacío. Verificar el token primero haría que el bypass de dev nunca aplique.
             var secret = _config["Recaptcha:SecretKey"];
             if (string.IsNullOrWhiteSpace(secret))
             {
                 _log.LogWarning("Recaptcha:SecretKey no configurado. Saltando verificación reCAPTCHA.");
                 return true;
             }
+
+            // Con SecretKey configurado, el token es obligatorio.
+            if (string.IsNullOrWhiteSpace(token)) return false;
 
             try
             {

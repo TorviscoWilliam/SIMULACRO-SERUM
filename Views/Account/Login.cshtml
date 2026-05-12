@@ -78,6 +78,7 @@
                                 </span>
                                 <input asp-for="NombreUsuario"
                                        class="form-control"
+                                       maxlength="15"
                                        placeholder="Ingrese su usuario"
                                        autocomplete="username"/>
                             </div>
@@ -92,6 +93,7 @@
                                 </span>
                                 <input asp-for="Contrasena"
                                        class="form-control"
+                                       maxlength="50"
                                        placeholder="Ingrese su contraseña"
                                        autocomplete="current-password"/>
                                 <button class="btn btn-outline-secondary" type="button" id="togglePass">
