@@ -32,6 +32,36 @@ builder.Services.AddRateLimiter(options =>
                 Window      = TimeSpan.FromMinutes(1),
                 QueueLimit  = 0
             }));
+
+    // En vez de devolver un 429 pelado, redirigimos al GET de Login con un
+    // flag para que la vista muestre un mensaje amigable al usuario.
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var http = context.HttpContext;
+
+        // Calcular segundos hasta poder reintentar (si el limitador lo expone).
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var ra)
+            ? (int)ra.TotalSeconds
+            : 60;
+        http.Response.Headers["Retry-After"] = retryAfter.ToString();
+
+        // Para POSTs normales del form, redirigimos al login con un querystring
+        // que la vista detecta y renderiza como alerta. Esto evita la pantalla
+        // genérica de 429 del navegador.
+        if (HttpMethods.IsPost(http.Request.Method))
+        {
+            http.Response.StatusCode = StatusCodes.Status303SeeOther;
+            http.Response.Headers.Location =
+                $"/Account/Login?rateLimit=1&retry={retryAfter}";
+            return;
+        }
+
+        // Para otros casos (GET, AJAX), respondemos texto plano.
+        http.Response.ContentType = "text/plain; charset=utf-8";
+        await http.Response.WriteAsync(
+            $"Demasiados intentos. Intenta de nuevo en {retryAfter} segundo(s).",
+            cancellationToken);
+    };
 });
 
 // Necesario para que funcione correctamente detrás del proxy inverso (Azure/Railway).

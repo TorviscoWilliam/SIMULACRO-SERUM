@@ -58,6 +58,18 @@
                             </div>
                         }
 
+                        @if (Context.Request.Query["rateLimit"] == "1")
+                        {
+                            var retryStr = Context.Request.Query["retry"].ToString();
+                            int.TryParse(retryStr, out var retrySec);
+                            if (retrySec <= 0) retrySec = 60;
+                            <div class="alert alert-warning py-2 small">
+                                <i class="bi bi-shield-exclamation me-1"></i>
+                                Demasiados intentos desde esta red. Por seguridad, espera
+                                <strong>@retrySec segundo(s)</strong> e inténtalo de nuevo.
+                            </div>
+                        }
+
                         <div class="mb-3">
                             <label asp-for="NombreUsuario" class="form-label fw-semibold"></label>
                             <div class="input-group">
