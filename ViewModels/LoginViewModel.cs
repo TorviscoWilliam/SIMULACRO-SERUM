@@ -38,5 +38,12 @@ namespace SimulacroExamen.ViewModels
         /// </summary>
         [Display(Name = "Mantener sesión iniciada")]
         public bool Recordarme { get; set; } = false;
+
+        /// <summary>
+        /// Token generado por reCAPTCHA v3 en el cliente y enviado en el campo
+        /// oculto "g-recaptcha-response". Lo valida RecaptchaService contra
+        /// la API de Google antes de tocar la BD.
+        /// </summary>
+        public string? RecaptchaToken { get; set; }
     }
 }

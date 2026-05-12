@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
@@ -19,14 +20,16 @@ namespace SimulacroExamen.Controllers
     /// </summary>
     public class AccountController : Controller
     {
-        private readonly ApplicationDbContext    _db;
-        private readonly IEmailService           _email;
+        private readonly ApplicationDbContext       _db;
+        private readonly IEmailService              _email;
         private readonly ILogger<AccountController> _log;
+        private readonly IRecaptchaService          _recaptcha;
+        private readonly IConfiguration             _config;
 
-        // ── Protección anti fuerza bruta (en memoria) ─────────────
-        private static readonly ConcurrentDictionary<string, (int intentos, DateTime bloqueoHasta)> _loginIntentos = new();
-        private const int MaxIntentos = 5;
-        private static readonly TimeSpan DuracionBloqueo = TimeSpan.FromMinutes(15);
+        // Constantes del bloqueo por usuario (capa 1 de defensa: BD)
+        private const int      MaxIntentosUsuario = 3;
+        private static readonly TimeSpan DuracionBaneoUsuario = TimeSpan.FromMinutes(5);
+        private const double   RecaptchaScoreMinimo = 0.5;
 
         // Genera un token seguro (256 bits de entropía) usando CSPRNG.
         // Sustituye a Guid.NewGuid() para tokens de sesión, verificación y reset.
@@ -34,14 +37,19 @@ namespace SimulacroExamen.Controllers
             Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
         /// <summary>
-        /// Inyecta el contexto de base de datos y el servicio de correo.
+        /// Inyecta el contexto de base de datos, el servicio de correo,
+        /// el servicio de reCAPTCHA y la configuración (para leer SiteKey).
         /// </summary>
         public AccountController(ApplicationDbContext db, IEmailService email,
-                                 ILogger<AccountController> log)
+                                 ILogger<AccountController> log,
+                                 IRecaptchaService recaptcha,
+                                 IConfiguration config)
         {
-            _db    = db;
-            _email = email;
-            _log   = log;
+            _db        = db;
+            _email     = email;
+            _log       = log;
+            _recaptcha = recaptcha;
+            _config    = config;
         }
 
         // ── GET /Account/Login ───────────────────────────────────────
@@ -57,29 +65,34 @@ namespace SimulacroExamen.Controllers
             if (User.Identity?.IsAuthenticated == true)
                 return RedirectToRol();
 
+            ViewBag.RecaptchaSiteKey = _config["Recaptcha:SiteKey"];
             return View(new LoginViewModel { ReturnUrl = returnUrl });
         }
 
         // ── POST /Account/Login ──────────────────────────────────────
         /// <summary>
-        /// Procesa las credenciales enviadas por el formulario de login.
-        /// Aplica rate-limiting por IP, verifica contraseña con BCrypt,
-        /// genera un SessionToken único para invalidar sesiones anteriores
-        /// y emite la cookie de autenticación.
+        /// Procesa las credenciales del formulario. Aplica 3 capas defensivas:
+        ///   1. Rate Limiter por IP (atributo EnableRateLimiting → 10 req/min/IP)
+        ///   2. reCAPTCHA v3 (score mínimo 0.5, acción "login")
+        ///   3. Bloqueo por usuario en BD (3 intentos → ban de 5 min vía FechaBaneo)
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting("login-ip")]
         public async Task<IActionResult> Login(LoginViewModel vm)
         {
+            ViewBag.RecaptchaSiteKey = _config["Recaptcha:SiteKey"];
+
             if (!ModelState.IsValid)
                 return View(vm);
 
-            // ── Rate-limit por IP ──────────────────────────────────────
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            if (_loginIntentos.TryGetValue(ip, out var info) && info.bloqueoHasta > DateTime.UtcNow)
+            // ── Capa 2: reCAPTCHA v3 ───────────────────────────────────
+            // Se valida ANTES de tocar la BD para evitar carga de DB con bots.
+            var scoreOk = await _recaptcha.VerificarAsync(
+                vm.RecaptchaToken, accion: "login", scoreMinimo: RecaptchaScoreMinimo);
+            if (!scoreOk)
             {
-                var restante = (int)(info.bloqueoHasta - DateTime.UtcNow).TotalMinutes + 1;
-                ModelState.AddModelError("", $"Demasiados intentos fallidos. Intente de nuevo en {restante} minuto(s).");
+                ModelState.AddModelError("", "Validación de seguridad fallida. Recarga la página e inténtalo de nuevo.");
                 return View(vm);
             }
 
@@ -88,22 +101,46 @@ namespace SimulacroExamen.Controllers
             var usuario = await _db.Usuarios
                 .FirstOrDefaultAsync(u => u.NombreUsuario == nombreBusqueda && u.Activo);
 
+            // ── Capa 1: bloqueo por usuario en BD ──────────────────────
+            // Si FechaBaneo > now, el usuario está temporalmente bloqueado.
+            // Esto cubre ataques distribuidos donde el rate limiter por IP no aplica.
+            if (usuario?.FechaBaneo != null && usuario.FechaBaneo > DateTime.Now)
+            {
+                var minutos = Math.Max(1, (int)Math.Ceiling((usuario.FechaBaneo.Value - DateTime.Now).TotalMinutes));
+                ModelState.AddModelError("", $"Cuenta bloqueada por seguridad. Intenta de nuevo en {minutos} minuto(s).");
+                return View(vm);
+            }
+
             if (usuario == null || !BCrypt.Net.BCrypt.Verify(vm.Contrasena, usuario.Contrasena))
             {
-                // Incrementar contador de intentos fallidos
-                var intentos = _loginIntentos.AddOrUpdate(ip,
-                    _ => (1, DateTime.MinValue),
-                    (_, prev) => (prev.intentos + 1, prev.bloqueoHasta));
-
-                if (intentos.intentos >= MaxIntentos)
-                    _loginIntentos[ip] = (intentos.intentos, DateTime.UtcNow.Add(DuracionBloqueo));
+                // Solo incrementamos contador si el usuario existe (no revela enumeración).
+                // Al llegar a 3, upserteamos FechaBaneo y reseteamos el contador a 0:
+                // la fuente de verdad del bloqueo es FechaBaneo, no el contador.
+                if (usuario != null)
+                {
+                    usuario.IntentosFallidos++;
+                    if (usuario.IntentosFallidos >= MaxIntentosUsuario)
+                    {
+                        usuario.FechaBaneo       = DateTime.Now.Add(DuracionBaneoUsuario);
+                        usuario.IntentosFallidos = 0;
+                    }
+                    try { await _db.SaveChangesAsync(); }
+                    catch (Exception ex)
+                    {
+                        // Si las columnas IntentosFallidos/FechaBaneo no existen aún
+                        // (esquema desactualizado), no bloqueamos el flujo del login.
+                        _log.LogWarning(ex, "No se pudo persistir contador anti brute-force.");
+                        _db.Entry(usuario).State = EntityState.Unchanged;
+                    }
+                }
 
                 ModelState.AddModelError("", "Usuario o contraseña incorrectos");
                 return View(vm);
             }
 
-            // Login exitoso → limpiar intentos
-            _loginIntentos.TryRemove(ip, out _);
+            // Login exitoso → reset preventivo de contador y baneo
+            usuario.IntentosFallidos = 0;
+            usuario.FechaBaneo       = null;
 
             // Generar token de sesión único → invalida cualquier sesión anterior.
             // Si por algún motivo el UPDATE falla (ej: columna SessionToken ausente

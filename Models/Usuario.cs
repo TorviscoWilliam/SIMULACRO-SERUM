@@ -73,6 +73,12 @@ namespace SimulacroExamen.Models
         /// <summary>Token hex-64 de la sesión activa. Se renueva en cada login.</summary>
         [MaxLength(128)] public string? SessionToken { get; set; }
 
+        // ── Anti brute-force por usuario ──────────────────────────────
+        /// <summary>Contador de intentos fallidos consecutivos. Se resetea al aplicar baneo.</summary>
+        public int IntentosFallidos { get; set; } = 0;
+        /// <summary>Fecha hasta la cual el usuario está bloqueado. Si es mayor a DateTime.Now, no puede iniciar sesión.</summary>
+        public DateTime? FechaBaneo { get; set; }
+
         // ── Reset de contraseña ───────────────────────────────────────
         /// <summary>Token único para restablecer contraseña (expira en 1 hora).</summary>
         [MaxLength(100)]

@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
 using SimulacroExamen.Services;
@@ -12,6 +14,25 @@ var builder = WebApplication.CreateBuilder(args);
 // ── Servicios MVC ───────────────────────────────────────────────
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpClient();
+
+// ── Rate Limiter por IP (.NET 8 nativo) ─────────────────────────
+// Política "login-ip": 10 requests por IP cada minuto al endpoint de login.
+// Protege contra spam masivo desde una sola IP/proxy. El bloqueo por usuario
+// (FechaBaneo en BD) es independiente y cubre ataques distribuidos.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = 429;
+
+    options.AddPolicy("login-ip", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window      = TimeSpan.FromMinutes(1),
+                QueueLimit  = 0
+            }));
+});
 
 // Necesario para que funcione correctamente detrás del proxy inverso (Azure/Railway).
 // No se hace .Clear() de KnownNetworks/KnownProxies: eso haría que la app confiase
@@ -52,6 +73,7 @@ builder.Services.AddDataProtection()
 builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
 builder.Services.AddScoped<IExcelService, ExcelService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IRecaptchaService, RecaptchaService>();
 
 // ── Autenticación por cookie ────────────────────────────────────
 // Se usa cookie propia (no sesión de servidor) para ser compatible con
@@ -104,11 +126,12 @@ app.Use(async (context, next) =>
     // en las vistas — quitar cuando migremos a nonces.
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
-        "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com; " +
+        "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com www.google.com www.gstatic.com; " +
         "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com fonts.googleapis.com; " +
         "font-src 'self' cdn.jsdelivr.net cdnjs.cloudflare.com fonts.gstatic.com data:; " +
         "img-src 'self' data: blob: https:; " +
         "connect-src 'self'; " +
+        "frame-src www.google.com; " +     // iframe de reCAPTCHA invisible
         "frame-ancestors 'none'; " +
         "base-uri 'self'; " +
         "form-action 'self'";
@@ -121,6 +144,9 @@ app.UseStaticFiles();
 // UseRouting debe ir antes de UseAuthentication/UseAuthorization para que los
 // atributos [Authorize] de los endpoints se evalúen con la ruta ya conocida.
 app.UseRouting();
+// Rate limiter va entre Routing y Authentication: ya conocemos la ruta,
+// pero aún no se ha autenticado al usuario (la limitación es por IP).
+app.UseRateLimiter();
 app.UseAuthentication();
 // SessionValidationMiddleware comprueba que el token de sesión en la cookie
 // coincida con el almacenado en BD, invalidando sesiones concurrentes.
@@ -361,6 +387,17 @@ static void MigrarEsquema(ApplicationDbContext context)
                    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='SessionToken')
                ALTER TABLE Usuarios ADD SessionToken NVARCHAR(128) NULL");
+
+        // Columnas anti brute-force: contador de intentos fallidos y fecha de baneo temporal.
+        // Si FechaBaneo > GETDATE() el usuario no puede iniciar sesión.
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='IntentosFallidos')
+               ALTER TABLE Usuarios ADD IntentosFallidos INT NOT NULL DEFAULT 0");
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='Usuarios' AND COLUMN_NAME='FechaBaneo')
+               ALTER TABLE Usuarios ADD FechaBaneo DATETIME2 NULL");
 
         // Ampliar SessionToken si aún tiene el tamaño antiguo de 36
         Exec(@"IF EXISTS (

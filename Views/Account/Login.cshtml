@@ -15,6 +15,10 @@
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true"/>
+    @if (!string.IsNullOrEmpty(ViewBag.RecaptchaSiteKey as string))
+    {
+        <script src="https://www.google.com/recaptcha/api.js?render=@(ViewBag.RecaptchaSiteKey)"></script>
+    }
     <style>
         body { background: linear-gradient(135deg, #1a2980 0%, #26d0ce 100%); min-height: 100vh; }
         .login-card { border-radius: 1.5rem; border: none; }
@@ -39,8 +43,9 @@
                 </div>
 
                 <div class="card-body p-4">
-                    <form asp-action="Login" method="post">
+                    <form asp-action="Login" method="post" id="loginForm">
                         <input type="hidden" asp-for="ReturnUrl"/>
+                        <input type="hidden" asp-for="RecaptchaToken" id="RecaptchaToken"/>
 
                         <div asp-validation-summary="ModelOnly"
                              class="alert alert-danger py-2 small"></div>
@@ -130,5 +135,30 @@
         }
     });
 </script>
+
+@if (!string.IsNullOrEmpty(ViewBag.RecaptchaSiteKey as string))
+{
+    <script>
+        // reCAPTCHA v3: al enviar el form interceptamos para obtener primero
+        // el token y luego completar el submit. Si la API de Google no carga,
+        // el form aún funciona (server-side hace la validación final).
+        (function () {
+            const form = document.getElementById('loginForm');
+            if (!form) return;
+            form.addEventListener('submit', function (e) {
+                if (typeof grecaptcha === 'undefined') return; // permitir submit normal
+                e.preventDefault();
+                grecaptcha.ready(function () {
+                    grecaptcha.execute('@(ViewBag.RecaptchaSiteKey)', { action: 'login' })
+                        .then(function (token) {
+                            document.getElementById('RecaptchaToken').value = token;
+                            form.submit();
+                        })
+                        .catch(function () { form.submit(); });
+                });
+            });
+        })();
+    </script>
+}
 </body>
 </html>
