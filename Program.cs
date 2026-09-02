@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using SimulacroExamen.Data;
@@ -8,6 +10,7 @@ using SimulacroExamen.Services;
 using SimulacroExamen.Middleware;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -120,8 +123,28 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.HttpOnly   = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.Cookie.SameSite     = SameSiteMode.Strict;
-        options.ExpireTimeSpan    = TimeSpan.FromHours(8);
+        options.ExpireTimeSpan    = TimeSpan.FromMinutes(ParametrosGlobalesDefaults.TiempoInactividadMinutos);
         options.SlidingExpiration = true;
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnValidatePrincipal = async context =>
+            {
+                var issuedUtc = context.Properties.IssuedUtc;
+                if (!issuedUtc.HasValue) return;
+
+                var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+                var minutos = await db.ParametrosGlobales
+                    .Select(p => (int?)p.TiempoInactividadMinutos)
+                    .FirstOrDefaultAsync()
+                    ?? ParametrosGlobalesDefaults.TiempoInactividadMinutos;
+
+                if (DateTimeOffset.UtcNow - issuedUtc.Value > TimeSpan.FromMinutes(minutos))
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                }
+            }
+        };
     });
 
 var app = builder.Build();
@@ -707,6 +730,38 @@ Participa en **sorteos exclusivos.**',
                    UltimaActualizacion  DATETIME2      NOT NULL DEFAULT GETDATE(),
                    AdminId              INT            NOT NULL DEFAULT 0
                )");
+
+        // Tabla ParametrosGlobales (configuración funcional editable por SuperAdmin)
+        Exec(@"IF NOT EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='ParametrosGlobales')
+               BEGIN
+                   CREATE TABLE ParametrosGlobales (
+                       Id                             INT IDENTITY(1,1) PRIMARY KEY,
+                       TiempoMaximoSimulacroMinutos  INT       NOT NULL DEFAULT 120,
+                       TiempoInactividadMinutos      INT       NOT NULL DEFAULT 30,
+                       UmbralAprobacionPorcentaje    INT       NOT NULL DEFAULT 70,
+                       UmbralRegularPorcentaje       INT       NOT NULL DEFAULT 50,
+                       FechaActualizacion            DATETIME2 NOT NULL DEFAULT GETDATE(),
+                       AdminId                        INT       NULL,
+                       CONSTRAINT FK_ParametrosGlobales_Usuarios
+                           FOREIGN KEY (AdminId) REFERENCES Usuarios(Id) ON DELETE SET NULL
+                   );
+
+                   INSERT INTO ParametrosGlobales
+                       (TiempoMaximoSimulacroMinutos, TiempoInactividadMinutos,
+                        UmbralAprobacionPorcentaje, UmbralRegularPorcentaje)
+                   VALUES (120, 30, 70, 50);
+               END");
+
+        Exec(@"IF EXISTS (
+                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+                   WHERE TABLE_NAME='ParametrosGlobales')
+               AND NOT EXISTS (SELECT 1 FROM ParametrosGlobales)
+               INSERT INTO ParametrosGlobales
+                   (TiempoMaximoSimulacroMinutos, TiempoInactividadMinutos,
+                    UmbralAprobacionPorcentaje, UmbralRegularPorcentaje)
+               VALUES (120, 30, 70, 50)");
 
         // Tabla OpcionesDuracion (opciones de tiempo configurables por TipoExamen)
         Exec(@"IF NOT EXISTS (

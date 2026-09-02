@@ -35,6 +35,7 @@ namespace SimulacroExamen.Data
         public DbSet<Sugerencia>             Sugerencias             { get; set; }
         public DbSet<ConfiguracionCorreo>    ConfiguracionCorreo     { get; set; }
         public DbSet<OpcionDuracion>         OpcionesDuracion        { get; set; }
+        public DbSet<ParametrosGlobales>      ParametrosGlobales      { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -244,6 +245,14 @@ namespace SimulacroExamen.Data
                 e.HasOne(est => est.PlanSuscripcion)
                  .WithMany()
                  .HasForeignKey(est => est.PlanSuscripcionId)
+                 .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<ParametrosGlobales>(e =>
+            {
+                e.HasOne(p => p.Admin)
+                 .WithMany()
+                 .HasForeignKey(p => p.AdminId)
                  .OnDelete(DeleteBehavior.SetNull);
             });
         }

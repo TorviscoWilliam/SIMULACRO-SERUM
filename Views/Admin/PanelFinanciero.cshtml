@@ -1,0 +1,237 @@
+@model SimulacroExamen.ViewModels.PanelFinancieroViewModel
+@{
+    ViewData["Title"] = "Panel financiero";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-cash-coin me-2 text-success"></i>Panel financiero
+        </h2>
+        <p class="text-muted mb-0">Ingresos, conversión y registros de los últimos seis meses</p>
+    </div>
+    <span class="badge bg-danger fs-6 px-3 py-2">
+        <i class="bi bi-shield-lock-fill me-1"></i>Solo SuperAdmin
+    </span>
+</div>
+
+<div class="alert alert-info border-0 shadow-sm small">
+    <i class="bi bi-info-circle me-1"></i>
+    Los ingresos se estiman con usuarios registrados en el mes que tienen un plan asignado y ya no están en trial.
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-success">
+            <div class="card-body">
+                <div class="small text-muted mb-1">Ingresos 6 meses</div>
+                <div class="fs-2 fw-bold text-success">S/ @Model.IngresosPeriodo.ToString("0.00")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-primary">
+            <div class="card-body">
+                <div class="small text-muted mb-1">Usuarios pagos</div>
+                <div class="fs-2 fw-bold text-primary">@Model.TotalUsuariosPagoPeriodo</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-warning">
+            <div class="card-body">
+                <div class="small text-muted mb-1">Conversión trial a pago</div>
+                <div class="fs-2 fw-bold text-warning">@Model.TasaConversionPeriodo.ToString("0.0")%</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-top border-4 border-info">
+            <div class="card-body">
+                <div class="small text-muted mb-1">Registros nuevos / semana</div>
+                <div class="fs-2 fw-bold text-info">@Model.PromedioRegistrosPorSemana.ToString("0.##")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-0 py-3">
+                <h6 class="mb-0 fw-semibold">
+                    <i class="bi bi-graph-up-arrow me-2 text-success"></i>Ingresos y registros mensuales
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="chartFinanciero" height="130"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-0 py-3">
+                <h6 class="mb-0 fw-semibold">
+                    <i class="bi bi-pie-chart-fill me-2 text-primary"></i>Distribución por plan
+                </h6>
+            </div>
+            <div class="card-body">
+                @if (Model.DistribucionPlanes.Any())
+                {
+                    <canvas id="chartPlanes" height="180"></canvas>
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                        Sin usuarios pagos en el período.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 py-3">
+                <h6 class="mb-0 fw-semibold">
+                    <i class="bi bi-table me-2 text-secondary"></i>Detalle mensual
+                </h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mes</th>
+                            <th class="text-end">Ingresos</th>
+                            <th class="text-end">Registros</th>
+                            <th class="text-end">Pagos</th>
+                            <th class="text-end">Trial</th>
+                            <th class="text-end">Conversión</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var mes in Model.Meses)
+                        {
+                            <tr>
+                                <td class="fw-semibold text-capitalize">@mes.Nombre</td>
+                                <td class="text-end text-success fw-semibold">S/ @mes.Ingresos.ToString("0.00")</td>
+                                <td class="text-end">@mes.RegistrosNuevos</td>
+                                <td class="text-end">@mes.UsuariosPago</td>
+                                <td class="text-end">@mes.UsuariosTrial</td>
+                                <td class="text-end">@mes.TasaConversion.ToString("0.0")%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 py-3">
+                <h6 class="mb-0 fw-semibold">
+                    <i class="bi bi-stars me-2 text-warning"></i>Planes
+                </h6>
+            </div>
+            <div class="card-body">
+                @if (!Model.DistribucionPlanes.Any())
+                {
+                    <p class="text-muted small mb-0">No hay distribución disponible.</p>
+                }
+                else
+                {
+                    @foreach (var plan in Model.DistribucionPlanes)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span class="fw-semibold">@plan.NombrePlan</span>
+                                <span>@plan.Usuarios (@plan.Porcentaje.ToString("0.0")%)</span>
+                            </div>
+                            <div class="progress" style="height:7px">
+                                <div class="progress-bar" style="width:@plan.Porcentaje.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                            </div>
+                            <div class="small text-muted mt-1">S/ @plan.IngresosEstimados.ToString("0.00") estimados</div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+    const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Labels));
+    const ingresos = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.IngresosMensuales));
+    const registros = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.RegistrosMensuales));
+    const conversion = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ConversionMensual));
+
+    new Chart(document.getElementById('chartFinanciero'), {
+        data: {
+            labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Ingresos S/',
+                    data: ingresos,
+                    backgroundColor: 'rgba(25,135,84,.18)',
+                    borderColor: 'rgba(25,135,84,.85)',
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Registros',
+                    data: registros,
+                    borderColor: 'rgba(13,110,253,.9)',
+                    backgroundColor: 'rgba(13,110,253,.12)',
+                    tension: .35,
+                    yAxisID: 'y1'
+                },
+                {
+                    type: 'line',
+                    label: 'Conversión %',
+                    data: conversion,
+                    borderColor: 'rgba(255,193,7,.95)',
+                    backgroundColor: 'rgba(255,193,7,.15)',
+                    tension: .35,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'S/' } },
+                y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } }
+            }
+        }
+    });
+
+    @if (Model.DistribucionPlanes.Any())
+    {
+        <text>
+    new Chart(document.getElementById('chartPlanes'), {
+        type: 'doughnut',
+        data: {
+            labels: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DistribucionPlanes.Select(p => p.NombrePlan).ToArray())),
+            datasets: [{
+                data: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DistribucionPlanes.Select(p => p.Usuarios).ToArray())),
+                backgroundColor: ['#0d6efd','#198754','#ffc107','#dc3545','#6f42c1','#20c997']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } }
+        }
+    });
+        </text>
+    }
+</script>
+}

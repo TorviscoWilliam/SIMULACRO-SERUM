@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimulacroExamen.Data;
 using SimulacroExamen.Models;
+using SimulacroExamen.Services;
 using SimulacroExamen.ViewModels;
 
 namespace SimulacroExamen.Controllers
@@ -336,6 +337,11 @@ namespace SimulacroExamen.Controllers
             // se cae al catch que verifica solo la existencia del tipo con columnas básicas.
             int    numPreguntasTipo  = 20;
             int?   durMinutosTipo    = null;
+            var tiempoMaximoGlobalMin = await _db.ParametrosGlobales
+                .OrderBy(p => p.Id)
+                .Select(p => (int?)p.TiempoMaximoSimulacroMinutos)
+                .FirstOrDefaultAsync()
+                ?? ParametrosGlobalesDefaults.TiempoMaximoSimulacroMinutos;
 
             try
             {
@@ -387,7 +393,7 @@ namespace SimulacroExamen.Controllers
             else if (durMinutosTipo.HasValue)
                 duracionSegundos = durMinutosTipo * 60;
             else
-                duracionSegundos = null;
+                duracionSegundos = tiempoMaximoGlobalMin * 60;
 
             var rng       = new Random();
             var mezcladas = preguntas.OrderBy(_ => rng.Next())
@@ -731,6 +737,41 @@ namespace SimulacroExamen.Controllers
         /// <param name="id">ID del examen completado a mostrar.</param>
         public async Task<IActionResult> Resultado(int id)
         {
+            var vm = await ObtenerResultadoVm(id);
+            if (vm == null)
+                return RedirectToAction(nameof(Historial));
+
+            var parametros = await _db.ParametrosGlobales
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.UmbralAprobacionPorcentaje, p.UmbralRegularPorcentaje })
+                .FirstOrDefaultAsync();
+            ViewBag.UmbralAprobacionPorcentaje = parametros?.UmbralAprobacionPorcentaje
+                ?? ParametrosGlobalesDefaults.UmbralAprobacionPorcentaje;
+            ViewBag.UmbralRegularPorcentaje = parametros?.UmbralRegularPorcentaje
+                ?? ParametrosGlobalesDefaults.UmbralRegularPorcentaje;
+
+            return View(vm);
+        }
+
+        // ── GET /Examen/ExportarResultadoPdf/{id} ────────────────────
+        /// <summary>
+        /// Descarga el resultado detallado de un examen completado en formato PDF.
+        /// Solo permite exportar examenes completados del usuario autenticado.
+        /// </summary>
+        /// <param name="id">ID del examen completado a exportar.</param>
+        public async Task<IActionResult> ExportarResultadoPdf(int id)
+        {
+            var vm = await ObtenerResultadoVm(id);
+            if (vm == null)
+                return RedirectToAction(nameof(Historial));
+
+            var bytes = ResultadoPdfService.Generar(vm);
+            var filename = $"Resultado_Examen_{vm.ExamenId}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            return File(bytes, "application/pdf", filename);
+        }
+
+        private async Task<ResultadoExamenViewModel?> ObtenerResultadoVm(int id)
+        {
             var examen = await _db.Examenes
                 .Include(e => e.TipoExamen)
                 .Include(e => e.PreguntasExamen.OrderBy(pe => pe.Orden))
@@ -741,7 +782,7 @@ namespace SimulacroExamen.Controllers
                 .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == CurrentUserId && e.Completado);
 
             if (examen == null)
-                return RedirectToAction(nameof(Historial));
+                return null;
 
             var notaPonderada = await _db.Estudiantes
                 .Where(u => u.Id == CurrentUserId)
@@ -780,7 +821,7 @@ namespace SimulacroExamen.Controllers
                 });
             }
 
-            return View(vm);
+            return vm;
         }
 
         // ── GET /Examen/Configuracion ─────────────────────────────────
@@ -893,6 +934,15 @@ namespace SimulacroExamen.Controllers
                 .Where(e => e.UsuarioId == CurrentUserId && e.Completado)
                 .OrderByDescending(e => e.FechaFin)
                 .ToListAsync();
+
+            var parametros = await _db.ParametrosGlobales
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.UmbralAprobacionPorcentaje, p.UmbralRegularPorcentaje })
+                .FirstOrDefaultAsync();
+            ViewBag.UmbralAprobacionPorcentaje = parametros?.UmbralAprobacionPorcentaje
+                ?? ParametrosGlobalesDefaults.UmbralAprobacionPorcentaje;
+            ViewBag.UmbralRegularPorcentaje = parametros?.UmbralRegularPorcentaje
+                ?? ParametrosGlobalesDefaults.UmbralRegularPorcentaje;
 
             return View(examenes);
         }

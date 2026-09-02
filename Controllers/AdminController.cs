@@ -64,6 +64,17 @@ namespace SimulacroExamen.Controllers
             ViewBag.FiltroFechaStr = filtro.ToString("dd/MM/yyyy");
             ViewBag.EsFiltrado    = filtro != hoy || !string.IsNullOrWhiteSpace(usuario);
 
+            var parametrosGlobales = await _db.ParametrosGlobales
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.UmbralAprobacionPorcentaje, p.UmbralRegularPorcentaje })
+                .FirstOrDefaultAsync();
+            var umbralAprobacion = (parametrosGlobales?.UmbralAprobacionPorcentaje
+                                    ?? ParametrosGlobalesDefaults.UmbralAprobacionPorcentaje) / 100.0;
+            ViewBag.UmbralAprobacionPorcentaje = parametrosGlobales?.UmbralAprobacionPorcentaje
+                ?? ParametrosGlobalesDefaults.UmbralAprobacionPorcentaje;
+            ViewBag.UmbralRegularPorcentaje = parametrosGlobales?.UmbralRegularPorcentaje
+                ?? ParametrosGlobalesDefaults.UmbralRegularPorcentaje;
+
             // ── Stats generales (sin filtro) ─────────────────────────
             ViewBag.TotalUsuarios  = await _db.Estudiantes.CountAsync(u => u.Activo);
             ViewBag.TotalAdmins    = await _db.Administradores.CountAsync(u => u.Activo);
@@ -89,7 +100,7 @@ namespace SimulacroExamen.Controllers
                   && e.FechaFin.Value.Date == filtro && e.TotalPreguntas > 0);
             var aprobadosFiltro = await _db.Examenes.CountAsync(
                 e => e.Completado && e.FechaFin.HasValue && e.FechaFin.Value.Date == filtro
-                  && e.TotalPreguntas > 0 && (double)e.Puntaje / e.TotalPreguntas >= 0.60);
+                  && e.TotalPreguntas > 0 && (double)e.Puntaje / e.TotalPreguntas >= umbralAprobacion);
             ViewBag.TasaAprobacionHoy = totalFiltro > 0
                 ? Math.Round((double)aprobadosFiltro / totalFiltro * 100, 1) : 0.0;
 
@@ -172,6 +183,85 @@ namespace SimulacroExamen.Controllers
         // ═══════════════════════════════════════════════════════════
         //  USUARIOS
         // ═══════════════════════════════════════════════════════════
+
+        // ── Panel financiero y tendencia de registros ────────────────
+        /// <summary>
+        /// Muestra métricas financieras y de crecimiento de usuarios para los
+        /// últimos seis meses. Solo accesible para SuperAdmin.
+        /// </summary>
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> PanelFinanciero()
+        {
+            var hoy = DateTime.Today;
+            var inicioPeriodo = new DateTime(hoy.Year, hoy.Month, 1).AddMonths(-5);
+            var finPeriodo = new DateTime(hoy.Year, hoy.Month, 1).AddMonths(1);
+            var cultura = System.Globalization.CultureInfo.GetCultureInfo("es-PE");
+
+            var estudiantes = await _db.Estudiantes
+                .Include(e => e.PlanSuscripcion)
+                .Where(e => e.FechaCreacion >= inicioPeriodo && e.FechaCreacion < finPeriodo)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.FechaCreacion,
+                    e.EsTrial,
+                    e.PlanSuscripcionId,
+                    PlanNombre = e.PlanSuscripcion != null ? e.PlanSuscripcion.Nombre : null,
+                    PlanPrecio = e.PlanSuscripcion != null ? e.PlanSuscripcion.Precio : 0m
+                })
+                .ToListAsync();
+
+            var meses = Enumerable.Range(0, 6)
+                .Select(i => inicioPeriodo.AddMonths(i))
+                .Select(m =>
+                {
+                    var registrosMes = estudiantes
+                        .Where(e => e.FechaCreacion.Year == m.Year && e.FechaCreacion.Month == m.Month)
+                        .ToList();
+                    var pagosMes = registrosMes
+                        .Where(e => e.PlanSuscripcionId != null && !e.EsTrial)
+                        .ToList();
+
+                    return new MesFinancieroVM
+                    {
+                        Mes             = m.Month,
+                        Anio            = m.Year,
+                        Nombre          = m.ToString("MMMM yyyy", cultura),
+                        EtiquetaCorta   = m.ToString("MMM yy", cultura),
+                        RegistrosNuevos = registrosMes.Count,
+                        UsuariosTrial   = registrosMes.Count(e => e.EsTrial || e.PlanSuscripcionId == null),
+                        UsuariosPago    = pagosMes.Count,
+                        Ingresos        = pagosMes.Sum(e => e.PlanPrecio)
+                    };
+                })
+                .ToList();
+
+            var totalPagosPeriodo = estudiantes.Count(e => e.PlanSuscripcionId != null && !e.EsTrial);
+            var distribucion = estudiantes
+                .Where(e => e.PlanSuscripcionId != null && !e.EsTrial)
+                .GroupBy(e => e.PlanNombre ?? "Sin plan")
+                .Select(g => new DistribucionPlanVM
+                {
+                    NombrePlan        = g.Key,
+                    Usuarios          = g.Count(),
+                    IngresosEstimados = g.Sum(x => x.PlanPrecio),
+                    Porcentaje        = totalPagosPeriodo > 0
+                        ? Math.Round((double)g.Count() / totalPagosPeriodo * 100, 1)
+                        : 0
+                })
+                .OrderByDescending(g => g.Usuarios)
+                .ToList();
+
+            var semanasPeriodo = Math.Max(1, (finPeriodo - inicioPeriodo).TotalDays / 7.0);
+            var vm = new PanelFinancieroViewModel
+            {
+                Meses = meses,
+                DistribucionPlanes = distribucion,
+                PromedioRegistrosPorSemana = Math.Round(estudiantes.Count / semanasPeriodo, 2)
+            };
+
+            return View(vm);
+        }
 
         /// <summary>
         /// Lista paginada de todos los usuarios del sistema (estudiantes y administradores).
@@ -1635,12 +1725,37 @@ namespace SimulacroExamen.Controllers
         //  LOGS DE ACTIVIDAD
         // ═══════════════════════════════════════════════════════════
 
-        public async Task<IActionResult> Logs(int page = 1)
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> Logs(DateTime? fechaDesde, DateTime? fechaHasta,
+                                              string? usuario, string? accion, int page = 1)
         {
             const int pageSize = 50;
-            var query = _db.LogsActividad.Include(l => l.Admin).OrderByDescending(l => l.Fecha);
+            var query = _db.LogsActividad.Include(l => l.Admin).AsQueryable();
+
+            if (fechaDesde.HasValue)
+                query = query.Where(l => l.Fecha >= fechaDesde.Value.Date);
+            if (fechaHasta.HasValue)
+            {
+                var fin = fechaHasta.Value.Date.AddDays(1);
+                query = query.Where(l => l.Fecha < fin);
+            }
+            if (!string.IsNullOrWhiteSpace(usuario))
+            {
+                var u = usuario.Trim().ToUpperInvariant();
+                query = query.Where(l => l.Admin != null && l.Admin.NombreUsuario.Contains(u));
+            }
+            if (!string.IsNullOrWhiteSpace(accion))
+                query = query.Where(l => l.Accion == accion);
+
+            var acciones = await _db.LogsActividad
+                .Select(l => l.Accion)
+                .Distinct()
+                .OrderBy(a => a)
+                .ToListAsync();
+
             var total = await query.CountAsync();
             var logs  = await query
+                .OrderByDescending(l => l.Fecha)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
@@ -1648,7 +1763,73 @@ namespace SimulacroExamen.Controllers
             ViewBag.Page       = page;
             ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
             ViewBag.TotalItems = total;
+            ViewBag.FechaDesde = fechaDesde?.ToString("yyyy-MM-dd") ?? "";
+            ViewBag.FechaHasta = fechaHasta?.ToString("yyyy-MM-dd") ?? "";
+            ViewBag.Usuario    = usuario?.Trim() ?? "";
+            ViewBag.Accion     = accion?.Trim() ?? "";
+            ViewBag.Acciones   = acciones;
             return View(logs);
+        }
+
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> ParametrosGlobales()
+        {
+            var parametros = await ObtenerParametrosGlobales();
+            var vm = new ParametrosGlobalesViewModel
+            {
+                TiempoMaximoSimulacroMinutos = parametros.TiempoMaximoSimulacroMinutos,
+                TiempoInactividadMinutos     = parametros.TiempoInactividadMinutos,
+                UmbralAprobacionPorcentaje   = parametros.UmbralAprobacionPorcentaje,
+                UmbralRegularPorcentaje      = parametros.UmbralRegularPorcentaje,
+                FechaActualizacion           = parametros.FechaActualizacion,
+                AdminNombre                  = parametros.Admin?.NombreUsuario
+            };
+
+            return View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> ParametrosGlobales(ParametrosGlobalesViewModel vm)
+        {
+            if (vm.UmbralRegularPorcentaje > vm.UmbralAprobacionPorcentaje)
+                ModelState.AddModelError(nameof(vm.UmbralRegularPorcentaje),
+                    "El umbral regular no puede superar el umbral de aprobación.");
+
+            if (!ModelState.IsValid)
+                return View(vm);
+
+            var parametros = await ObtenerParametrosGlobales();
+            parametros.TiempoMaximoSimulacroMinutos = vm.TiempoMaximoSimulacroMinutos;
+            parametros.TiempoInactividadMinutos     = vm.TiempoInactividadMinutos;
+            parametros.UmbralAprobacionPorcentaje   = vm.UmbralAprobacionPorcentaje;
+            parametros.UmbralRegularPorcentaje      = vm.UmbralRegularPorcentaje;
+            parametros.FechaActualizacion           = DateTime.Now;
+            parametros.AdminId                      = CurrentUserId;
+
+            await _db.SaveChangesAsync();
+            await RegistrarLog("ParametrosGlobales",
+                $"Parámetros actualizados: simulacro {vm.TiempoMaximoSimulacroMinutos} min, inactividad {vm.TiempoInactividadMinutos} min, aprobación {vm.UmbralAprobacionPorcentaje}%, regular {vm.UmbralRegularPorcentaje}%");
+
+            TempData["Exito"] = "Parámetros globales actualizados correctamente.";
+            return RedirectToAction(nameof(ParametrosGlobales));
+        }
+
+        private async Task<ParametrosGlobales> ObtenerParametrosGlobales()
+        {
+            var parametros = await _db.ParametrosGlobales
+                .Include(p => p.Admin)
+                .OrderBy(p => p.Id)
+                .FirstOrDefaultAsync();
+
+            if (parametros != null)
+                return parametros;
+
+            parametros = new ParametrosGlobales();
+            _db.ParametrosGlobales.Add(parametros);
+            await _db.SaveChangesAsync();
+            return parametros;
         }
 
         // ── Sugerencias de usuarios ───────────────────────────────

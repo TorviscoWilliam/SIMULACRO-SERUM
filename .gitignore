@@ -1,6 +1,7 @@
 ## .NET
 bin/
 obj/
+.verify-*/
 *.user
 *.suo
 .vs/

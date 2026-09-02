@@ -1,9 +1,11 @@
 @model ResultadoExamenViewModel
 @{
     ViewData["Title"] = "Resultado del Examen";
-    string badgeClass  = Model.Porcentaje >= 70 ? "bg-success" : Model.Porcentaje >= 50 ? "bg-warning" : "bg-danger";
-    string iconClass   = Model.Porcentaje >= 70 ? "bi-trophy-fill text-warning" : Model.Porcentaje >= 50 ? "bi-emoji-neutral text-warning" : "bi-emoji-frown text-danger";
-    string mensajeMain = Model.Porcentaje >= 70 ? "¡Excelente resultado!" : Model.Porcentaje >= 50 ? "Buen intento, sigue practicando" : "Sigue esforzándote";
+    int umbralAprobacion = (int)(ViewBag.UmbralAprobacionPorcentaje ?? 70);
+    int umbralRegular    = (int)(ViewBag.UmbralRegularPorcentaje ?? 50);
+    string badgeClass  = Model.Porcentaje >= umbralAprobacion ? "bg-success" : Model.Porcentaje >= umbralRegular ? "bg-warning" : "bg-danger";
+    string iconClass   = Model.Porcentaje >= umbralAprobacion ? "bi-trophy-fill text-warning" : Model.Porcentaje >= umbralRegular ? "bi-emoji-neutral text-warning" : "bi-emoji-frown text-danger";
+    string mensajeMain = Model.Porcentaje >= umbralAprobacion ? "¡Excelente resultado!" : Model.Porcentaje >= umbralRegular ? "Buen intento, sigue practicando" : "Sigue esforzándote";
     string tituloExamen = !string.IsNullOrEmpty(Model.TipoExamenNombre) ? Model.TipoExamenNombre : "Examen";
 }
 
@@ -85,12 +87,16 @@
         </div>
 
         <!-- Acciones -->
-        <div class="d-flex gap-3 mb-4">
+        <div class="d-flex flex-column flex-sm-row gap-3 mb-4">
             <a asp-action="Index" class="btn btn-primary btn-lg flex-fill">
                 <i class="bi bi-arrow-repeat me-2"></i>Nuevo Examen
             </a>
             <a asp-action="Historial" class="btn btn-outline-secondary btn-lg flex-fill">
                 <i class="bi bi-clock-history me-2"></i>Ver Historial
+            </a>
+            <a asp-action="ExportarResultadoPdf" asp-route-id="@Model.ExamenId"
+               class="btn btn-outline-danger btn-lg flex-fill">
+                <i class="bi bi-file-earmark-pdf me-2"></i>Exportar PDF
             </a>
         </div>
 

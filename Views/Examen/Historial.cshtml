@@ -4,6 +4,8 @@
     int total    = Model.Count;
     double mejor = total > 0 ? Model.Max(e => e.Porcentaje) : 0;
     double prom  = total > 0 ? Model.Average(e => e.Porcentaje) : 0;
+    int umbralAprobacion = (int)(ViewBag.UmbralAprobacionPorcentaje ?? 70);
+    int umbralRegular    = (int)(ViewBag.UmbralRegularPorcentaje ?? 50);
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -61,8 +63,8 @@
                     {
                         var e   = Model[i];
                         var dur = e.FechaFin.HasValue ? (e.FechaFin.Value - e.FechaInicio) : TimeSpan.Zero;
-                        string badge = e.Porcentaje >= 70 ? "bg-success"
-                                     : e.Porcentaje >= 50 ? "bg-warning"
+                        string badge = e.Porcentaje >= umbralAprobacion ? "bg-success"
+                                     : e.Porcentaje >= umbralRegular ? "bg-warning"
                                      : "bg-danger";
 
                         <tr>
@@ -99,7 +101,7 @@
                             </td>
                             <td class="text-center">
                                 <span class="badge @badge rounded-pill px-3">
-                                    @(e.Porcentaje >= 70 ? "Aprobado" : e.Porcentaje >= 50 ? "Regular" : "Desaprobado")
+                                    @(e.Porcentaje >= umbralAprobacion ? "Aprobado" : e.Porcentaje >= umbralRegular ? "Regular" : "Desaprobado")
                                 </span>
                             </td>
                             <td class="text-center">
